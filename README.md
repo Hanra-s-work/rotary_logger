@@ -1,2 +1,35 @@
+<!-- 
+-- +==== BEGIN rotary_logger =================+
+-- LOGO: 
+-- ..........####...####..........
+-- ......###.....#.#########......
+-- ....##........#.###########....
+-- ...#..........#.############...
+-- ...#..........#.#####.######...
+-- ..#.....##....#.###..#...####..
+-- .#.....#.##...#.##..##########.
+-- #.....##########....##...######
+-- #.....#...##..#.##..####.######
+-- .#...##....##.#.##..###..#####.
+-- ..#.##......#.#.####...######..
+-- ..#...........#.#############..
+-- ..#...........#.#############..
+-- ...##.........#.############...
+-- ......#.......#.#########......
+-- .......#......#.########.......
+-- .........#####...#####.........
+-- /STOP
+-- PROJECT: rotary_logger
+-- FILE: README.md
+-- CREATION DATE: 29-10-2025
+-- LAST Modified: 5:40:15 29-10-2025
+-- DESCRIPTION: 
+-- A module that provides a universal python light on iops way of logging to files your program execution.
+-- /STOP
+-- COPYRIGHT: (c) Asperguide
+-- PURPOSE: This is the readme of the project, an explanation of the aim of the project as well as how to set it up or contribute.
+-- // AR
+-- +==== END rotary_logger =================+
+--> 
 # rotary_logger
-This is a logger for servers that I am trying to optimise as much as possible to allow logging of the terminal output in a seamless maner towards files while remaining lox on io usage.
+This is a logger for servers that I am trying to optimise as much as possible to allow logging of the terminal output in a seamless manner towards files while remaining lox on io usage.

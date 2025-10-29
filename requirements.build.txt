@@ -1,0 +1,5 @@
+build ==1.2.2.post1
+pytest ==8.4.1
+
+# ask_question runtime dependencies
+-r ./requirements.txt

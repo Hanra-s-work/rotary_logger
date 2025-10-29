@@ -1,0 +1,54 @@
+/* 
+* +==== BEGIN rotary_logger =================+
+* LOGO: 
+* ..........####...####..........
+* ......###.....#.#########......
+* ....##........#.###########....
+* ...#..........#.############...
+* ...#..........#.#####.######...
+* ..#.....##....#.###..#...####..
+* .#.....#.##...#.##..##########.
+* #.....##########....##...######
+* #.....#...##..#.##..####.######
+* .#...##....##.#.##..###..#####.
+* ..#.##......#.#.####...######..
+* ..#...........#.#############..
+* ..#...........#.#############..
+* ...##.........#.############...
+* ......#.......#.#########......
+* .......#......#.########.......
+* .........#####...#####.........
+* /STOP
+* PROJECT: rotary_logger
+* FILE: rotary_logger.code-workspace
+* CREATION DATE: 29-10-2025
+* LAST Modified: 14:48:24 16-10-2025
+* DESCRIPTION: 
+* A module that provides a universal python light on iops way of logging to files your program execution.
+* /STOP
+* COPYRIGHT: (c) Asperguide
+* PURPOSE: Define the configuration of the workspace.
+* // AR
+* +==== END rotary_logger =================+
+*/
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"asperheader.enableDebug": false,
+		"asperheader.extensionIgnore": [
+			"*.code-workspace",
+			"python.version",
+			"settings.json"
+		],
+		"asperheader.promptToCreateIfMissing": true,
+		"asperheader.useWorkspaceNameWhenAvailable": true,
+		"asperheader.projectDescription": "A module that provides a universal python light on iops way of logging to files your program execution.",
+		"files.associations": {
+			"*.cnf": "nginx" // This is for linting purposes, the comments in both file types are the same.
+		}
+	}
+}

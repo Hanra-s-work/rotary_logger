@@ -1,0 +1,92 @@
+# 
+# +==== BEGIN rotary_logger =================+
+# LOGO: 
+# ..........####...####..........
+# ......###.....#.#########......
+# ....##........#.###########....
+# ...#..........#.############...
+# ...#..........#.#####.######...
+# ..#.....##....#.###..#...####..
+# .#.....#.##...#.##..##########.
+# #.....##########....##...######
+# #.....#...##..#.##..####.######
+# .#...##....##.#.##..###..#####.
+# ..#.##......#.#.####...######..
+# ..#...........#.#############..
+# ..#...........#.#############..
+# ...##.........#.############...
+# ......#.......#.#########......
+# .......#......#.########.......
+# .........#####...#####.........
+# /STOP
+# PROJECT: rotary_logger
+# FILE: pyproject.toml
+# CREATION DATE: 29-10-2025
+# LAST Modified: 5:42:5 29-10-2025
+# DESCRIPTION: 
+# A module that provides a universal python light on iops way of logging to files your program execution.
+# /STOP
+# COPYRIGHT: (c) Asperguide
+# PURPOSE: File in charge of containing the required configuration to allow the python code to compile as a library.
+# // AR
+# +==== END rotary_logger =================+
+# 
+
+# pyproject.toml
+
+[build-system]
+requires = ["setuptools >= 80.9.0", "wheel >= 0.36.2", "pep517 >= 0.11.0"]
+build-backend = "setuptools.build_meta"
+
+
+[tool.setuptools.packages.find]
+include = ["rotary_logger"]
+exclude = ["lenv", "menv", "wenv", ".env", "env"]
+
+[project]
+name = "rotary_logger"
+version = '0.0.0'
+license = "MIT"
+authors = [
+    { name = "Henry Letellier", email = "henrysoftwarehouse@protonmail.com" },
+]
+maintainers = [
+    { name = "Henry Letellier", email = "henrysoftwarehouse@protonmail.com" },
+]
+description = "A module that provides a universal python light on iops way of logging to files your program execution."
+license-files = ["LICENSE"]
+readme = { file = "README.md", content-type = "text/markdown" }
+keywords = [
+    "logger",
+    "rotary",
+    "server",
+    "lightweight",
+    "iops",
+    "stdout",
+    "stderr",
+    "optimised",
+    "logging",
+    "pure python",
+    "no deps",
+]
+classifiers = [
+    "Environment :: Console",
+    "Natural Language :: English",
+    "Development Status :: 3 - Alpha",
+    "Operating System :: OS Independent",
+    # Specify the Python versions you support here.
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+requires-python = ">=3.8"
+
+[project.urls]
+Homepage = "https://github.com/Hanra-s-work/rotary_logger"
+Documentation = "https://github.com/Hanra-s-work/rotary_logger/blob/main/README.md"
+Repository = "https://github.com/Hanra-s-work/rotary_logger.git"
+Issues = "https://github.com/Hanra-s-work/rotary_logger/issues"

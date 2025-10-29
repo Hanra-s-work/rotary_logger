@@ -1,0 +1,40 @@
+# 
+# +==== BEGIN rotary_logger =================+
+# LOGO: 
+# ..........####...####..........
+# ......###.....#.#########......
+# ....##........#.###########....
+# ...#..........#.############...
+# ...#..........#.#####.######...
+# ..#.....##....#.###..#...####..
+# .#.....#.##...#.##..##########.
+# #.....##########....##...######
+# #.....#...##..#.##..####.######
+# .#...##....##.#.##..###..#####.
+# ..#.##......#.#.####...######..
+# ..#...........#.#############..
+# ..#...........#.#############..
+# ...##.........#.############...
+# ......#.......#.#########......
+# .......#......#.########.......
+# .........#####...#####.........
+# /STOP
+# PROJECT: rotary_logger
+# FILE: requirements.txt
+# CREATION DATE: 29-10-2025
+# LAST Modified: 5:39:23 29-10-2025
+# DESCRIPTION: 
+# A module that provides a universal python light on iops way of logging to files your program execution.
+# /STOP
+# COPYRIGHT: (c) Asperguide
+# PURPOSE: The requirements.txt file in charge of allowing developers and users to easily install the required dependencies for the project to work.
+# // AR
+# +==== END rotary_logger =================+
+# 
+# A golden source way of installing the required dependencies by relying on the toml project (this is because it is a child optional dependency)
+-e .
+
+# ! Warning, if you are installing the requirements.txt
+# as a way to develop with the library, please run the 
+# following command once the installation has completed
+# pip uninstall rotary_logger -y
