@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: test_tee_stream_basic.py
 # CREATION DATE: 01-11-2025
-# LAST Modified: 4:33:12 01-11-2025
+# LAST Modified: 7:42:0 01-11-2025
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -32,7 +32,6 @@
 # +==== END rotary_logger =================+
 """
 import io
-import sys
 from pathlib import Path
 
 import pytest

@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: pyproject.toml
 # CREATION DATE: 29-10-2025
-# LAST Modified: 7:40:51 01-11-2025
+# LAST Modified: 7:43:10 01-11-2025
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -45,7 +45,7 @@ exclude = ["lenv", "menv", "wenv", "env", "venv", ".env", ".venv"]
 
 [project]
 name = "rotary_logger"
-version = '0.0.0'
+version = '1.0.0'
 license = "MIT"
 authors = [
     { name = "Henry Letellier", email = "henrysoftwarehouse@protonmail.com" },
