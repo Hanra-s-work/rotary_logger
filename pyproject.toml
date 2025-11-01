@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: pyproject.toml
 # CREATION DATE: 29-10-2025
-# LAST Modified: 5:42:5 29-10-2025
+# LAST Modified: 7:36:41 01-11-2025
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -41,7 +41,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["rotary_logger"]
-exclude = ["lenv", "menv", "wenv", ".env", "env"]
+exclude = ["lenv", "menv", "wenv", "env", "venv", ".env", ".venv"]
 
 [project]
 name = "rotary_logger"
@@ -53,6 +53,7 @@ authors = [
 maintainers = [
     { name = "Henry Letellier", email = "henrysoftwarehouse@protonmail.com" },
 ]
+dependencies = []
 description = "A module that provides a universal python light on iops way of logging to files your program execution."
 license-files = ["LICENSE"]
 readme = { file = "README.md", content-type = "text/markdown" }
@@ -90,3 +91,7 @@ Homepage = "https://github.com/Hanra-s-work/rotary_logger"
 Documentation = "https://github.com/Hanra-s-work/rotary_logger/blob/main/README.md"
 Repository = "https://github.com/Hanra-s-work/rotary_logger.git"
 Issues = "https://github.com/Hanra-s-work/rotary_logger/issues"
+
+
+[project.scripts]
+pytee = "rotary_logger.entrypoint:main"
