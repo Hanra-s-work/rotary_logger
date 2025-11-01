@@ -1,3 +1,36 @@
+# 
+# +==== BEGIN rotary_logger =================+
+# LOGO: 
+# ..........####...####..........
+# ......###.....#.#########......
+# ....##........#.###########....
+# ...#..........#.############...
+# ...#..........#.#####.######...
+# ..#.....##....#.###..#...####..
+# .#.....#.##...#.##..##########.
+# #.....##########....##...######
+# #.....#...##..#.##..####.######
+# .#...##....##.#.##..###..#####.
+# ..#.##......#.#.####...######..
+# ..#...........#.#############..
+# ..#...........#.#############..
+# ...##.........#.############...
+# ......#.......#.#########......
+# .......#......#.########.......
+# .........#####...#####.........
+# /STOP
+# PROJECT: rotary_logger
+# FILE: .gitignore
+# CREATION DATE: 01-11-2025
+# LAST Modified: 9:11:13 01-11-2025
+# DESCRIPTION: 
+# A module that provides a universal python light on iops way of logging to files your program execution.
+# /STOP
+# COPYRIGHT: (c) Asperguide
+# PURPOSE: This is the file providing the files/folders from the repository to ignore when commiting changes.
+# // AR
+# +==== END rotary_logger =================+
+# 
 *.pyc
 *.egg-info
 **/dist
@@ -11,3 +44,5 @@ menv
 .vscode
 # No temporary files
 *tmp*
+# log folder
+**/logs/**

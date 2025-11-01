@@ -34,7 +34,7 @@
 import sys
 from pathlib import Path
 
-from rotary_logger.rotary_logger import RotaryLogger
+from rotary_logger.rotary_logger_cls import RotaryLogger
 from rotary_logger.tee_stream import TeeStream
 from rotary_logger.file_instance import FileInstance
 from rotary_logger import constants as CONST

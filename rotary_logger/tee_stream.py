@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: tee_stream.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 2:48:13 01-11-2025
+# LAST Modified: 9:3:48 01-11-2025
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -65,7 +65,8 @@ class TeeStream:
         flush_size: Optional[int] = None,
         mode: CONST.StdMode = CONST.StdMode.STDUNKNOWN,
         error_mode: CONST.ErrorMode = CONST.ErrorMode.WARN_NO_PIPE,
-        encoding: Optional[str] = None
+        encoding: Optional[str] = None,
+        log_to_file: bool = True
     ):
         """Create a TeeStream.
 
@@ -94,6 +95,7 @@ class TeeStream:
             self.file_instance.set_flush_size(flush_size)
         if encoding:
             self.file_instance.set_encoding(encoding)
+        self.file_instance.set_log_to_file(log_to_file)
         self.mode: CONST.StdMode = mode
         self.original_stream: TextIO = original_stream
         self.error_mode: CONST.ErrorMode = error_mode

@@ -35,7 +35,7 @@ import sys
 import shutil
 from pathlib import Path
 
-from rotary_logger.rotary_logger import RotaryLogger
+from rotary_logger.rotary_logger_cls import RotaryLogger
 
 
 def test_start_logging_wires_and_writes(tmp_path: Path) -> None:

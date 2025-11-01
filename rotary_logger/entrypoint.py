@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: entrypoint.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 7:29:41 01-11-2025
+# LAST Modified: 8:55:33 01-11-2025
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -37,10 +37,10 @@ import argparse
 
 try:
     from . import constants as CONST
-    from .rotary_logger import RotaryLogger
+    from .rotary_logger_cls import RotaryLogger
 except ImportError:
     import constants as CONST
-    from rotary_logger import RotaryLogger
+    from rotary_logger_cls import RotaryLogger
 
 
 class Tee:
@@ -56,8 +56,6 @@ class Tee:
 
     def __init__(
         self,
-        override: bool = True,
-        ignore_interrupts: bool = False,
         output_error: CONST.ErrorMode = CONST.ErrorMode.WARN_NO_PIPE
     ) -> None:
         """Create the entrypoint helper and initialise the logger.
@@ -67,8 +65,6 @@ class Tee:
             ignore_interrupts: When True, SIGINT (Ctrl-C) is ignored.
             output_error: Policy for handling broken-pipe / stdout errors.
         """
-        self.override: bool = override
-        self.ignore_interrupts: bool = ignore_interrupts
         self.output_error: CONST.ErrorMode = output_error
         self.args = self._parse_args()
         self._handle_interrupts_if_required()
@@ -77,7 +73,7 @@ class Tee:
         # Create and configure the high-level RotaryLogger instance
         self.rotary_logger: RotaryLogger = RotaryLogger(
             log_to_file=True,
-            override=self.args.overwrite,
+            override=not self.args.append,
             merge_streams=self.args.merge,
         )
 
@@ -89,7 +85,7 @@ class Tee:
             "files", nargs="*", help="Destination log files (defaults to rotary_logger folder)"
         )
         parser.add_argument(
-            "-a", "--append", dest="overwrite", action="store_false",
+            "-a", "--append", action="store_true",
             help="Append to the output files instead of overwriting"
         )
         parser.add_argument(
@@ -118,33 +114,43 @@ class Tee:
             signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     def _pipe_check(self) -> None:
-        """Perform a minimal output-mode check for broken-pipe handling.
-
-        The library supports different error handling policies (see
-        `CONST.ErrorMode`). This helper enforces policy variants that
-        are no-ops when stdout/stderr are pipes. Currently it simply
-        returns when the configured `output_error` indicates a "warn
-        but only when not a pipe" policy and the process is running
-        with a pipe attached.
-        """
-        if self.output_error == CONST.ErrorMode.WARN_NO_PIPE and CONST.IS_PIPE:
-            return
+        """Handle broken-pipe policy."""
+        if self.output_error == CONST.ErrorMode.WARN:
+            sys.stderr.write(CONST.BROKEN_PIPE_ERROR)
+        elif self.output_error == CONST.ErrorMode.EXIT:
+            sys.exit(CONST.ERROR)
+        elif self.output_error in (CONST.ErrorMode.WARN_NO_PIPE, CONST.ErrorMode.EXIT_NO_PIPE):
+            if not CONST.IS_PIPE:
+                if "WARN" in self.output_error.value:
+                    sys.stderr.write(CONST.BROKEN_PIPE_ERROR)
+                else:
+                    sys.exit(CONST.ERROR)
 
     def run(self):
-        """Main execution loop (like the UNIX tee)."""
+        """Main execution loop (like UNIX `tee`)."""
+        _log_to_file = True
+        if self.args.files is None:
+            _log_to_file = False
         self.rotary_logger.start_logging(
-            log_folder=None,
+            log_folder=self.args.files or None,
             max_filesize=self.args.max_size,
-            merged=self.args.merge
+            merged=self.args.merge,
+            log_to_file=_log_to_file
         )
 
         try:
             for line in sys.stdin:
-                # This goes to both terminal and log file
-                print(line, end="")
+                try:
+                    print(line, end="")
+                except BrokenPipeError:
+                    self._pipe_check()
+                    break
         except KeyboardInterrupt:
             if not self.args.ignore_interrupts:
                 raise
+        finally:
+            sys.stdout.flush()
+            sys.stderr.flush()
 
 
 def main():

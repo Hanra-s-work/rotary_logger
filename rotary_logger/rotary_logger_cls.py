@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: rotary_logger.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 2:39:37 01-11-2025
+# LAST Modified: 8:56:59 01-11-2025
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -196,6 +196,7 @@ class RotaryLogger:
         log_folder: Optional[Path] = None,
         max_filesize: Optional[int] = None,
         merged: Optional[bool] = None,
+        log_to_file: bool = True
     ) -> None:
         """Function in charge of starting the logger in an optimised way.
 
@@ -240,12 +241,14 @@ class RotaryLogger:
                 sys.stdout = TeeStream(
                     mixed_inst,
                     sys.stdout,
-                    mode=CONST.StdMode.STDOUT
+                    mode=CONST.StdMode.STDOUT,
+                    log_to_file=log_to_file
                 )
                 sys.stderr = TeeStream(
                     mixed_inst,
                     sys.stderr,
-                    mode=CONST.StdMode.STDERR
+                    mode=CONST.StdMode.STDERR,
+                    log_to_file=log_to_file
                 )
             else:
                 out_inst: FileInstance = FileInstance(
@@ -272,12 +275,14 @@ class RotaryLogger:
                 sys.stdout = TeeStream(
                     out_inst,
                     sys.stdout,
-                    mode=CONST.StdMode.STDOUT
+                    mode=CONST.StdMode.STDOUT,
+                    log_to_file=log_to_file
                 )
                 sys.stderr = TeeStream(
                     err_inst,
                     sys.stderr,
-                    mode=CONST.StdMode.STDERR
+                    mode=CONST.StdMode.STDERR,
+                    log_to_file=log_to_file
                 )
 
             # Ensure final flush at exit

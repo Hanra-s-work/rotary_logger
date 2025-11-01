@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: constants.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 1:31:28 01-11-2025
+# LAST Modified: 7:55:6 01-11-2025
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -32,12 +32,12 @@
 # +==== END rotary_logger =================+
 """
 
-from dataclasses import dataclass
 import os
 import sys
-from typing import IO, Optional, Dict, Any
-from pathlib import Path
 from enum import Enum
+from pathlib import Path
+from dataclasses import dataclass
+from typing import IO, Optional, Dict, Any
 
 IS_A_TTY: bool = sys.stdout.isatty()
 IS_PIPE: bool = not IS_A_TTY

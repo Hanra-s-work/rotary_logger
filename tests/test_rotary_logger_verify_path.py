@@ -38,7 +38,7 @@ from pathlib import Path
 try:
     sys.path.insert(0, '.')
     from rotary_logger import constants as CONST
-    from rotary_logger.rotary_logger import RotaryLogger
+    from rotary_logger.rotary_logger_cls import RotaryLogger
 except ImportError as e:
     raise RuntimeError(f"Failed to import the library, error: {e}") from e
 
