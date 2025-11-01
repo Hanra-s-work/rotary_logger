@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: rotary_logger.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 8:56:59 01-11-2025
+# LAST Modified: 13:16:1 01-11-2025
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -132,52 +132,52 @@ class RotaryLogger:
         Returns:
             Path: The checked path.
         """
-        with self._file_lock:
+        # Snapshot inputs and minimal state under lock, then perform
+        # filesystem operations outside the lock to avoid blocking other
+        # threads. Any path validation/mkdir/write attempts happen below
+        # without holding `self._file_lock`.
+        try:
+            raw = Path(raw_log_folder)
+            if raw.is_absolute():
+                candidate = raw.resolve(strict=False)
+            else:
+                candidate = (
+                    Path(__file__).parent /
+                    raw
+                ).resolve(strict=False)
+
+            # If the user didn't explicitly end with our base folder name, append it.
+            if candidate.name != CONST.LOG_FOLDER_BASE_NAME:
+                candidate = candidate / CONST.LOG_FOLDER_BASE_NAME
+
+            # Basic validation: protect against overly long paths.
+            if len(str(candidate)) > 255:
+                raise ValueError(f"{CONST.MODULE_NAME} Path too long")
+
+            # Ensure we can create and write into the folder. Do I/O here
+            # outside of any locks to avoid blocking other threads.
             try:
-                # Accept absolute paths directly; otherwise treat as relative to the package dir.
-                raw = Path(raw_log_folder)
-                if raw.is_absolute():
-                    candidate = raw.resolve(strict=False)
-                else:
-                    candidate = (
-                        Path(__file__).parent /
-                        raw
-                    ).resolve(strict=False)
+                candidate.mkdir(parents=True, exist_ok=True)
+                testfile = candidate / ".rotary_write_test"
+                with open(testfile, "w", encoding="utf-8") as fh:
+                    fh.write("x")
+                testfile.unlink()
+            except OSError as e:
+                raise ValueError(
+                    f"{CONST.MODULE_NAME} Path not writable: {e}") from e
 
-                # If the user didn't explicitly end with our base folder name, append it.
-                if candidate.name != CONST.LOG_FOLDER_BASE_NAME:
-                    candidate = candidate / CONST.LOG_FOLDER_BASE_NAME
-
-                # Basic validation: protect against overly long paths.
-                if len(str(candidate)) > 255:
-                    raise ValueError(
-                        f"{CONST.MODULE_NAME} Path too long"
-                    )
-
-                # Ensure we can create and write into the folder.
-                try:
-                    candidate.mkdir(parents=True, exist_ok=True)
-                    testfile = candidate / ".rotary_write_test"
-                    with open(testfile, "w", encoding="utf-8") as fh:
-                        fh.write("x")
-                    testfile.unlink()
-                except OSError as e:
-                    raise ValueError(
-                        f"{CONST.MODULE_NAME} Path not writable: {e}"
-                    ) from e
-
-                return candidate
-            except ValueError as e:
-                warn(
-                    f"{CONST.MODULE_NAME} [WARN] Invalid LOG_FOLDER_NAME ({raw_log_folder!r}): {e}. Falling back to default."
-                )
-                try:
-                    CONST.DEFAULT_LOG_FOLDER.mkdir(parents=True, exist_ok=True)
-                except OSError as err:
-                    raise RuntimeError(
-                        f"{CONST.MODULE_NAME} The provided and default folder paths are not writable"
-                    ) from err
-                return CONST.DEFAULT_LOG_FOLDER
+            return candidate
+        except ValueError as e:
+            warn(
+                f"{CONST.MODULE_NAME} [WARN] Invalid LOG_FOLDER_NAME ({raw_log_folder!r}): {e}. Falling back to default."
+            )
+            try:
+                CONST.DEFAULT_LOG_FOLDER.mkdir(parents=True, exist_ok=True)
+            except OSError as err:
+                raise RuntimeError(
+                    f"{CONST.MODULE_NAME} The provided and default folder paths are not writable"
+                ) from err
+            return CONST.DEFAULT_LOG_FOLDER
 
     def _resolve_log_folder(self, log_folder: Optional[Path]) -> Path:
         """Resolve and verify the final log folder to use.
@@ -205,85 +205,89 @@ class RotaryLogger:
             default_max_filesize (int, optional): _description_. Defaults to CONST.DEFAULT_LOG_MAX_FILE_SIZE.
         """
         with self._file_lock:
-            # Defaults
+            # Defaults (snapshot)
             if log_folder is None:
                 if self.raw_log_folder == "":
-                    log_folder = self.default_log_folder
+                    _raw_folder = self.default_log_folder
                 else:
-                    log_folder = self.raw_log_folder
-            if max_filesize is None:
-                max_filesize = self.default_max_filesize
+                    _raw_folder = self.raw_log_folder
+            else:
+                _raw_folder = log_folder
 
-            # Determine final log folder using the built-in verification.
-            _log_folder = self._verify_user_log_path(log_folder)
-            _log_folder.mkdir(parents=True, exist_ok=True)
+            if max_filesize is not None:
+                self.file_data.set_max_size(max_filesize)
 
-            self.file_data.set_max_size(self._get_user_max_file_size())
-
+            # snapshot file_data-derived configuration to avoid nested locks
+            _override = self.file_data.get_override()
+            _encoding = self.file_data.get_encoding()
+            _prefix = self.file_data.get_prefix()
+            _max_size_mb = self.file_data.get_max_size()
+            _flush_size_kb = self.file_data.get_flush_size()
+            _merged_flag = bool(merged)
             if merged is None:
-                merged_flag = self.file_data.merged
-            else:
-                merged_flag = bool(merged)
+                _merged_flag = self.file_data.merged
+            _merged_flag = self.file_data.merged
 
-            if merged_flag:
-                mixed_inst: FileInstance = FileInstance(
-                    file_path=_log_folder,
-                    override=self.file_data.get_override(),
-                    merged=True,
-                    encoding=self.file_data.get_encoding(),
-                    prefix=self.file_data.get_prefix(),
-                    max_size_mb=self.file_data.get_max_size(),
-                    flush_size_kb=self.file_data.get_flush_size(),
-                    folder_prefix=None
-                )
+        # Determine final log folder using the built-in verification (outside lock)
+        _log_folder = self._verify_user_log_path(_raw_folder)
+        _log_folder.mkdir(parents=True, exist_ok=True)
 
-                # Redirecting the TeeStream instances to the correct streams
-                sys.stdout = TeeStream(
-                    mixed_inst,
-                    sys.stdout,
-                    mode=CONST.StdMode.STDOUT,
-                    log_to_file=log_to_file
-                )
-                sys.stderr = TeeStream(
-                    mixed_inst,
-                    sys.stderr,
-                    mode=CONST.StdMode.STDERR,
-                    log_to_file=log_to_file
-                )
-            else:
-                out_inst: FileInstance = FileInstance(
-                    file_path=_log_folder,
-                    override=self.file_data.get_override(),
-                    merged=False,
-                    encoding=self.file_data.get_encoding(),
-                    prefix=self.file_data.get_prefix(),
-                    max_size_mb=self.file_data.get_max_size(),
-                    flush_size_kb=self.file_data.get_flush_size(),
-                    folder_prefix=CONST.StdMode.STDOUT
-                )
-                err_inst: FileInstance = FileInstance(
-                    file_path=_log_folder,
-                    override=self.file_data.get_override(),
-                    merged=False,
-                    encoding=self.file_data.get_encoding(),
-                    prefix=self.file_data.get_prefix(),
-                    max_size_mb=self.file_data.get_max_size(),
-                    flush_size_kb=self.file_data.get_flush_size(),
-                    folder_prefix=CONST.StdMode.STDERR
-                )
+        # Apply user-provided max size
+        self.file_data.set_max_size(self._get_user_max_file_size())
 
-                sys.stdout = TeeStream(
-                    out_inst,
-                    sys.stdout,
-                    mode=CONST.StdMode.STDOUT,
-                    log_to_file=log_to_file
-                )
-                sys.stderr = TeeStream(
-                    err_inst,
-                    sys.stderr,
-                    mode=CONST.StdMode.STDERR,
-                    log_to_file=log_to_file
-                )
+        if _merged_flag:
+            mixed_inst: FileInstance = FileInstance(
+                file_path=_log_folder,
+                override=_override,
+                merged=True,
+                encoding=_encoding,
+                prefix=_prefix,
+                max_size_mb=_max_size_mb,
+                flush_size_kb=_flush_size_kb,
+                folder_prefix=None
+            )
+
+            stdout_inst = mixed_inst
+            stderr_inst = mixed_inst
+        else:
+            out_inst: FileInstance = FileInstance(
+                file_path=_log_folder,
+                override=_override,
+                merged=False,
+                encoding=_encoding,
+                prefix=_prefix,
+                max_size_mb=_max_size_mb,
+                flush_size_kb=_flush_size_kb,
+                folder_prefix=CONST.StdMode.STDOUT
+            )
+            err_inst: FileInstance = FileInstance(
+                file_path=_log_folder,
+                override=_override,
+                merged=False,
+                encoding=_encoding,
+                prefix=_prefix,
+                max_size_mb=_max_size_mb,
+                flush_size_kb=_flush_size_kb,
+                folder_prefix=CONST.StdMode.STDERR
+            )
+
+            stdout_inst = out_inst
+            stderr_inst = err_inst
+
+        # Now assign TeeStreams and register exit handlers under the lock
+        with self._file_lock:
+            sys.stdout = TeeStream(
+                stdout_inst,
+                sys.stdout,
+                mode=CONST.StdMode.STDOUT,
+                log_to_file=log_to_file
+            )
+            sys.stderr = TeeStream(
+                stderr_inst,
+                sys.stderr,
+                mode=CONST.StdMode.STDERR,
+                log_to_file=log_to_file
+            )
 
             # Ensure final flush at exit
             atexit.register(sys.stdout.flush)
