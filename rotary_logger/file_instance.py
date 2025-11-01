@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: file_instance.py
 # CREATION DATE: 30-10-2025
-# LAST Modified: 1:48:48 01-11-2025
+# LAST Modified: 2:39:55 01-11-2025
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -45,6 +45,13 @@ except ImportError:
 
 
 class FileInstance:
+    """Manage buffered writes, file descriptors, and log rotation.
+
+    Public methods are thread-safe and documented below. Writes are
+    appended to an in-memory buffer and flushed to disk when the
+    configured flush size is reached. Rotation is performed when the
+    underlying file grows beyond `max_size`.
+    """
 
     def __init__(
         self,
@@ -58,6 +65,19 @@ class FileInstance:
         flush_size_kb: Optional[int] = None,
         folder_prefix: Optional[CONST.StdMode] = None
     ) -> None:
+        """Create a FileInstance wrapper.
+
+        Args:
+            file_path: initial file path, Path or FileInfo, or None to defer.
+            override: when True open files for write ('w') instead of append ('a').
+            merged: whether multiple streams should share the same file.
+            encoding: text encoding to use for file I/O.
+            prefix: optional Prefix to use when teeing.
+            max_size_mb: optional maximum logfile size in MB.
+            flush_size_kb: optional buffer flush size in KB.
+            folder_prefix: optional StdMode to segregate per-stream folders.
+        """
+
         # per-instance mutable defaults (avoid sharing across instances)
         self._file_lock: RLock = RLock()
         self._mode: str = "a"
@@ -255,10 +275,12 @@ class FileInstance:
         return self._copy()
 
     def write(self, message: str) -> None:
-        """Function in charge of writing content to a stream a file if present and buffer hit, otherwise, appends values to the buffer.
+        """Append `message` to the internal buffer (thread-safe).
 
-        Args:
-            message (str): The message to be displayed
+        The message is encoded and counted toward `flush_size`. When the
+        buffer reaches the configured threshold a background flush is
+        triggered (performed synchronously inside `_flush_buffer()` but
+        with I/O outside the main lock to minimize blocking).
         """
         # append under lock, then decide whether to flush
         with self._file_lock:
@@ -268,7 +290,11 @@ class FileInstance:
             self._flush_buffer()
 
     def flush(self):
-        """Function that can be used to force the program to flush it's current stream and buffer
+        """Flush any buffered log lines to disk immediately.
+
+        This is a blocking call that performs disk I/O; callers should
+        avoid calling it too frequently. Errors raised by the underlying
+        I/O are propagated as OSError or ValueError when appropriate.
         """
         self._flush_buffer()
 
@@ -484,7 +510,11 @@ class FileInstance:
         return self._close_file_inner()
 
     def _flush_buffer(self):
-        """Function in charge of 
+        """Internal: detach pending buffer and write to disk.
+
+        Implements the swap-buffer pattern: capture and clear the in-memory
+        buffer while holding the lock, perform I/O outside the lock, then
+        update counters and rotate under lock.
         """
         # Swap-buffer pattern: capture pending writes under lock, then perform I/O
         with self._file_lock:

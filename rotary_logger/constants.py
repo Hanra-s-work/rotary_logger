@@ -97,10 +97,11 @@ ERROR_MODE_EXIT_NO_PIPE: str = "Exit No pipe"
 
 
 class ErrorMode(Enum):
-    """The tee error mode that can be used.
+    """Tee error handling policy enumeration.
 
-    Args:
-        Enum (_type_): The enumerators that can be used.
+    Members represent different policies for handling broken-pipe
+    situations (e.g. warn, exit, or variants for when stdout/stderr
+    is a pipe).
     """
     WARN = ERROR_MODE_WARN
     WARN_NO_PIPE = ERROR_MODE_WARN_NO_PIPE
@@ -113,6 +114,13 @@ FILE_LOG_DATE_FORMAT: str = "%Y_%m_%dT%Hh%Mm%Ss.log"
 
 @dataclass
 class FileInfo:
+    """Container for an open log file.
+
+    Attributes:
+        path: the Path to the file on disk.
+        descriptor: the open file object (text mode) or None.
+        written_bytes: number of bytes already written to the file.
+    """
     path: Optional[Path] = None
     descriptor: Optional[IO[Any]] = None
     written_bytes: int = 0
@@ -120,6 +128,12 @@ class FileInfo:
 
 @dataclass
 class Prefix:
+    """Flags describing which streams should be prefixed when mirrored.
+
+    Each flag is a boolean indicating whether the corresponding
+    standard stream (stdin/stdout/stderr) should receive a textual
+    prefix when written to disk.
+    """
     std_in: bool = False
     std_out: bool = False
     std_err: bool = False

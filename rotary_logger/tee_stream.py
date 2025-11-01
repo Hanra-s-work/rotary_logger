@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: tee_stream.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 2:8:56 01-11-2025
+# LAST Modified: 2:48:13 01-11-2025
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -46,7 +46,15 @@ except ImportError:
 
 
 class TeeStream:
-    """Redirects stdout/stderr to a file while keeping normal output, buffered, and rotating by max size."""
+    """Mirror a TextIO stream to disk while preserving normal output.
+
+    This class is intentionally lightweight: it captures short-lived
+    references under a tiny lock and then performs I/O without holding
+    that lock. Terminal writes are performed on the caller thread and
+    are wrapped to avoid raising unexpected errors back into the
+    application; disk writes are delegated to a `FileInstance` which
+    buffers and handles rotation.
+    """
 
     def __init__(
         self,
@@ -59,6 +67,18 @@ class TeeStream:
         error_mode: CONST.ErrorMode = CONST.ErrorMode.WARN_NO_PIPE,
         encoding: Optional[str] = None
     ):
+        """Create a TeeStream.
+
+        Args:
+            root: a `Path` or `FileInstance` describing the destination.
+            original_stream: the TextIO to mirror (usually sys.stdout).
+            max_size_mb: optional maximum logfile size in MB (passed to FileInstance).
+            flush_size: optional buffer flush threshold (passed to FileInstance).
+            mode: which standard stream this wraps (StdMode).
+            error_mode: Broken-pipe handling policy (ErrorMode).
+            encoding: optional file encoding override.
+        """
+
         self._file_lock: RLock = RLock()
         if isinstance(root, (Path, str)):
             self.file_instance = FileInstance(Path(root))
@@ -79,7 +99,12 @@ class TeeStream:
         self.error_mode: CONST.ErrorMode = error_mode
 
     def __del__(self):
-        """Function in charge of cleanup in case the class is deleted.
+        """Best-effort cleanup on object deletion.
+
+        Attempt to flush buffered data but never raise. Note that
+        ``__del__`` may not be called at interpreter shutdown; callers
+        that need deterministic flushing should call ``flush()``
+        explicitly.
         """
         try:
             self.flush()
@@ -90,6 +115,10 @@ class TeeStream:
         self.file_instance = None
 
     def _get_correct_prefix(self) -> str:
+        """Return the correct prefix string for the configured StdMode.
+
+        The result will already contain a trailing space when non-empty.
+        """
         # ensure we have a file instance and a valid StdMode enum value
         with self._file_lock:
             if not self.file_instance or not isinstance(self.mode, CONST.StdMode):
@@ -108,10 +137,12 @@ class TeeStream:
             return ""
 
     def write(self, message: str) -> None:
-        """Function in charge of writing content to a stream a file if present and buffer hit, otherwise, appends values to the buffer.
+        """Write `message` to the original stream and buffer it to file.
 
-        Args:
-            message (str): The message to be displayed
+        This method is safe to call from multiple threads. It captures the
+        necessary references under a short lock, performs the terminal
+        write on the caller thread (with known error handling), then
+        delegates buffered file writes to `FileInstance.write()`.
         """
         with self._file_lock:
             try:
@@ -139,7 +170,12 @@ class TeeStream:
             self.file_instance.write(f"{_prefix}{message}")
 
     def flush(self):
-        """Function that can be used to force the program to flush it's current stream and buffer
+        """Best-effort flush of terminal and buffered file output.
+
+        The call will attempt to flush both the original stream and
+        the associated `FileInstance`. Errors are swallowed to avoid
+        crashing the caller; use `FileInstance.flush()` directly for
+        stricter guarantees.
         """
         # Attempt to flush the original stream and always attempt to flush the file instance.
         with self._file_lock:

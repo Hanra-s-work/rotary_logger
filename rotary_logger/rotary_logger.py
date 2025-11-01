@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: rotary_logger.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 1:58:57 01-11-2025
+# LAST Modified: 2:39:37 01-11-2025
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -52,7 +52,13 @@ except ImportError:
 
 
 class RotaryLogger:
-    """ This is the main class of the program that will be called in order to initialise everything """
+    """High-level coordinator that installs `TeeStream` wrappers.
+
+    Responsibilities:
+    - Validate and create the target log folder.
+    - Configure a `FileInstance` with encoding, prefix and rotation policy.
+    - Replace `sys.stdout` and `sys.stderr` with `TeeStream` instances.
+    """
 
     def __init__(
         self,
@@ -68,6 +74,11 @@ class RotaryLogger:
         prefix_out_stream: bool = True,
         prefix_err_stream: bool = True,
     ) -> None:
+        """Create a RotaryLogger using the provided defaults.
+
+        The constructor does not start logging; call `start_logging()` to
+        install the `TeeStream` wrappers and begin mirroring output.
+        """
         self._file_lock: RLock = RLock()
         self.log_to_file: bool = log_to_file
         self.raw_log_folder: Path = Path(raw_log_folder)
@@ -86,7 +97,10 @@ class RotaryLogger:
         self.file_data.set_override(override)
 
     def __call__(self, *args: Any, **kwds: Any) -> None:
-        """Function that allows the class to be called like a function (thus making it callable)
+        """Convenience: allow the instance to be called to start logging.
+
+        Calling the instance is equivalent to calling `start_logging()`
+        and is provided for compact initialization patterns.
         """
         with self._file_lock:
             self.start_logging()
