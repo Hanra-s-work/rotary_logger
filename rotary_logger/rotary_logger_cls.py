@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: rotary_logger.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 13:16:1 01-11-2025
+# LAST Modified: 13:19:15 01-11-2025
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -223,10 +223,10 @@ class RotaryLogger:
             _prefix = self.file_data.get_prefix()
             _max_size_mb = self.file_data.get_max_size()
             _flush_size_kb = self.file_data.get_flush_size()
-            _merged_flag = bool(merged)
             if merged is None:
                 _merged_flag = self.file_data.merged
-            _merged_flag = self.file_data.merged
+            else:
+                _merged_flag = bool(merged)
 
         # Determine final log folder using the built-in verification (outside lock)
         _log_folder = self._verify_user_log_path(_raw_folder)
@@ -274,20 +274,26 @@ class RotaryLogger:
             stdout_inst = out_inst
             stderr_inst = err_inst
 
-        # Now assign TeeStreams and register exit handlers under the lock
+        # Construct TeeStream instances outside the lock to avoid holding
+        # `RotaryLogger._file_lock` while the TeeStream initializer may
+        # acquire `FileInstance` locks. Then assign the globals under the
+        # lock to keep the replacement atomic.
+        tee_out = TeeStream(
+            stdout_inst,
+            sys.stdout,
+            mode=CONST.StdMode.STDOUT,
+            log_to_file=log_to_file
+        )
+        tee_err = TeeStream(
+            stderr_inst,
+            sys.stderr,
+            mode=CONST.StdMode.STDERR,
+            log_to_file=log_to_file
+        )
+
         with self._file_lock:
-            sys.stdout = TeeStream(
-                stdout_inst,
-                sys.stdout,
-                mode=CONST.StdMode.STDOUT,
-                log_to_file=log_to_file
-            )
-            sys.stderr = TeeStream(
-                stderr_inst,
-                sys.stderr,
-                mode=CONST.StdMode.STDERR,
-                log_to_file=log_to_file
-            )
+            sys.stdout = tee_out
+            sys.stderr = tee_err
 
             # Ensure final flush at exit
             atexit.register(sys.stdout.flush)

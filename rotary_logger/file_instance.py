@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: file_instance.py
 # CREATION DATE: 30-10-2025
-# LAST Modified: 9:14:51 01-11-2025
+# LAST Modified: 13:56:1 01-11-2025
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -35,7 +35,7 @@
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Union, Dict, List, IO, Any
+from typing import Optional, Union, Dict, List
 from threading import RLock
 from warnings import warn
 
@@ -656,26 +656,33 @@ class FileInstance:
             log_path: Path = self._create_log_path()
             self.file = self._open_file(log_path)
 
-    def _create_log_path(self) -> Path:
+    def _create_log_path(self, base_override: Optional[Path] = None) -> Path:
         """Function in charge of creating the log path on disk.
 
         Returns:
             Path: The log_path
         """
+        # If a base_override is provided (for example when opening from
+        # `_open_file` with a user-supplied directory), prefer it. Otherwise
+        # fall back to the instance-configured path or package default.
         base = None
-        if self.file and isinstance(self.file.path, Path):
-            candidate = self.file.path
-            if candidate.suffix == '.log':
-                candidate.parent.mkdir(parents=True, exist_ok=True)
-                return candidate
-            base = candidate
-
         now = self._get_current_date()
-        _root: Path = Path(__file__).parent
-        if base is not None:
-            _root = base
-        elif self.file and self.file.path:
-            _root = self.file.path
+        if base_override is not None:
+            _root: Path = base_override
+        else:
+            if self.file and isinstance(self.file.path, Path):
+                candidate = self.file.path
+                if candidate.suffix == '.log':
+                    candidate.parent.mkdir(parents=True, exist_ok=True)
+                    return candidate
+                base = candidate
+
+            now = self._get_current_date()
+            _root: Path = Path(__file__).parent
+            if base is not None:
+                _root = base
+            elif self.file and self.file.path:
+                _root = self.file.path
 
         if _root.suffix == "" and CONST.LOG_FOLDER_BASE_NAME != _root.name:
             _root = _root / CONST.LOG_FOLDER_BASE_NAME
@@ -718,7 +725,7 @@ class FileInstance:
         _node: CONST.FileInfo = CONST.FileInfo()
         _node.path = Path(file_path)
         if self._looks_like_directory(_node.path):
-            _node.path = self._create_log_path()
+            _node.path = self._create_log_path(base_override=_node.path)
         # Ensure parent directory exists before attempting to open the file.
         _node.path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -780,10 +787,28 @@ class FileInstance:
         When `lock` is True the instance lock `self._file_lock` is
         acquired before closing the file. Returns True on completion.
         """
+        # Snapshot and clear the descriptor under lock, then perform the
+        # actual close outside the lock to avoid blocking other callers.
+        descriptor = None
         if lock:
             with self._file_lock:
-                return self._close_file_inner()
-        return self._close_file_inner()
+                if self.file:
+                    descriptor = getattr(self.file, "descriptor", None)
+                    try:
+                        self.file.descriptor = None
+                    except AttributeError:
+                        pass
+        else:
+            if self.file:
+                descriptor = getattr(self.file, "descriptor", None)
+
+        if descriptor:
+            try:
+                descriptor.close()
+            except (OSError, ValueError):
+                # ignore close errors
+                pass
+        return True
 
     def _flush_buffer(self) -> None:
         """Internal: detach pending buffer and write to disk.
@@ -792,44 +817,68 @@ class FileInstance:
         buffer while holding the lock, perform I/O outside the lock, then
         update counters and rotate under lock.
         """
-        # Swap-buffer pattern: capture pending writes under lock, then perform I/O
+        # Swap-buffer pattern: capture and detach the in-memory buffer under
+        # lock, then perform I/O outside the lock. If the file descriptor is
+        # missing, perform the open outside the lock as well to avoid blocking
+        # other callers.
         with self._file_lock:
             if not self._buffer:
                 return
             to_write = self._buffer
-            # detach buffer so writers won't block on I/O
             self._buffer = []
 
             if not self._log_to_file:
                 return
 
-            # ensure file and descriptor exist and are open (open under lock)
-            if not self.file or not getattr(self.file, "descriptor", None) or getattr(self.file.descriptor, "closed", False):
+            # Determine whether we need to open a descriptor. Do not perform
+            # the actual open while holding the lock.
+            needs_open = False
+            descriptor = None
+            if self.file:
+                descriptor = getattr(self.file, "descriptor", None)
+                if descriptor and not getattr(descriptor, "closed", False):
+                    needs_open = False
+                else:
+                    needs_open = True
+            else:
+                needs_open = True
+
+        # If necessary, open the file outside the lock
+        if needs_open:
+            try:
                 log_path: Path = self._create_log_path()
                 self.file = self._open_file(log_path)
+            except (OSError, ValueError):
+                # If we can't open the file, skip writing but keep buffer
+                # detached (to avoid blocking writers). We'll attempt again
+                # on the next flush.
+                return
 
-        # perform actual write outside the lock to avoid blocking writers
+        # perform actual write outside the lock
         try:
-            descriptor: Optional[IO[Any]] = None
-            if self.file:
-                descriptor = getattr(
-                    self.file,
-                    "descriptor",
-                    None
-                )
-            if descriptor and not getattr(descriptor, "closed", False):
-                descriptor.writelines(to_write)
-                descriptor.flush()
-        except (ValueError, OSError):
-            # try reopening and write again once
-            log_path: Path = self._create_log_path()
-            self.file = self._open_file(log_path)
-            descriptor: Optional[IO[Any]] = None
+            descriptor = None
             if self.file:
                 descriptor = getattr(self.file, "descriptor", None)
             if descriptor and not getattr(descriptor, "closed", False):
                 descriptor.writelines(to_write)
                 descriptor.flush()
+        except (ValueError, OSError):
+            # try reopening and write again once
+            try:
+                log_path: Path = self._create_log_path()
+                self.file = self._open_file(log_path)
+            except (OSError, ValueError):
+                return
+            descriptor = None
+            if self.file:
+                descriptor = getattr(self.file, "descriptor", None)
+            if descriptor and not getattr(descriptor, "closed", False):
+                try:
+                    descriptor.writelines(to_write)
+                    descriptor.flush()
+                except (ValueError, OSError):
+                    # give up on this flush attempt
+                    pass
 
         # update counters and rotate under lock
         with self._file_lock:
