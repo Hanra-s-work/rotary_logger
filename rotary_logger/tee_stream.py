@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: tee_stream.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 9:3:48 01-11-2025
+# LAST Modified: 10:11:11 01-11-2025
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -122,21 +122,29 @@ class TeeStream:
         The result will already contain a trailing space when non-empty.
         """
         # ensure we have a file instance and a valid StdMode enum value
+        _file_inst: Optional[FileInstance] = None
+        _prefix: Optional[CONST.Prefix] = None
+        _mode: Optional[CONST.StdMode] = None
         with self._file_lock:
-            if not self.file_instance or not isinstance(self.mode, CONST.StdMode):
+            if not self.file_instance:
                 return ""
-            _prefix: Optional[CONST.Prefix] = self.file_instance.get_prefix()
-            if not _prefix:
+            _file_inst = self.file_instance
+            if not isinstance(self.mode, CONST.StdMode):
                 return ""
-            if _prefix.std_err and self.mode == CONST.StdMode.STDERR:
-                return CONST.CORRECT_PREFIX[CONST.StdMode.STDERR] + CONST.SPACE
-            if _prefix.std_in and self.mode == CONST.StdMode.STDIN:
-                return CONST.CORRECT_PREFIX[CONST.StdMode.STDIN] + CONST.SPACE
-            if _prefix.std_out and self.mode == CONST.StdMode.STDOUT:
-                return CONST.CORRECT_PREFIX[CONST.StdMode.STDOUT] + CONST.SPACE
-            if _prefix.std_in or _prefix.std_err or _prefix.std_out:
-                return CONST.CORRECT_PREFIX[CONST.StdMode.STDUNKNOWN] + CONST.SPACE
+            _mode = self.mode
+        _prefix: Optional[CONST.Prefix] = _file_inst.get_prefix()
+
+        if not _prefix or not _file_inst.get_log_to_file():
             return ""
+        if _prefix.std_err and _mode == CONST.StdMode.STDERR:
+            return CONST.CORRECT_PREFIX[CONST.StdMode.STDERR] + CONST.SPACE
+        if _prefix.std_in and _mode == CONST.StdMode.STDIN:
+            return CONST.CORRECT_PREFIX[CONST.StdMode.STDIN] + CONST.SPACE
+        if _prefix.std_out and _mode == CONST.StdMode.STDOUT:
+            return CONST.CORRECT_PREFIX[CONST.StdMode.STDOUT] + CONST.SPACE
+        if _prefix.std_in or _prefix.std_err or _prefix.std_out:
+            return CONST.CORRECT_PREFIX[CONST.StdMode.STDUNKNOWN] + CONST.SPACE
+        return ""
 
     def write(self, message: str) -> None:
         """Write `message` to the original stream and buffer it to file.
@@ -146,30 +154,37 @@ class TeeStream:
         write on the caller thread (with known error handling), then
         delegates buffered file writes to `FileInstance.write()`.
         """
+        _tmp_message: str = ""
+        _file_instance: Optional[FileInstance] = None
         with self._file_lock:
+            _tmp_message = message
+            _file_instance = self.file_instance
+
+        try:
+            self.original_stream.write(message)
+        except BrokenPipeError:
+            if self.error_mode in (CONST.ErrorMode.EXIT, CONST.ErrorMode.EXIT_NO_PIPE):
+                sys.exit(CONST.ERROR)
+            elif self.error_mode in (CONST.ErrorMode.WARN, CONST.ErrorMode.WARN_NO_PIPE):
+                sys.stderr.write(CONST.BROKEN_PIPE_ERROR)
+        except OSError as exc:
+            # Unexpected I/O error writing to original stream: report and continue
             try:
-                self.original_stream.write(message)
-            except BrokenPipeError:
-                if self.error_mode in (CONST.ErrorMode.EXIT, CONST.ErrorMode.EXIT_NO_PIPE):
-                    sys.exit(CONST.ERROR)
-                elif self.error_mode in (CONST.ErrorMode.WARN, CONST.ErrorMode.WARN_NO_PIPE):
-                    sys.stderr.write(CONST.BROKEN_PIPE_ERROR)
-            except OSError as exc:
-                # Unexpected I/O error writing to original stream: report and continue
-                try:
-                    sys.stderr.write(
-                        f"{CONST.MODULE_NAME} I/O error writing to original stream: {exc}\n"
-                    )
-                except OSError:
-                    # swallow any errors writing to stderr during shutdown
-                    pass
+                sys.stderr.write(
+                    f"{CONST.MODULE_NAME} I/O error writing to original stream: {exc}\n"
+                )
+            except OSError:
+                # swallow any errors writing to stderr during shutdown
+                pass
 
-            # If no file instance configured, nothing more to do
-            if not self.file_instance:
-                return
+        if not _file_instance:
+            return
 
-            _prefix: str = self._get_correct_prefix()
-            self.file_instance.write(f"{_prefix}{message}")
+        if not _file_instance.get_log_to_file():
+            return
+
+        _prefix: str = self._get_correct_prefix()
+        _file_instance.write(f"{_prefix}{_tmp_message}")
 
     def flush(self):
         """Best-effort flush of terminal and buffered file output.
@@ -179,23 +194,26 @@ class TeeStream:
         crashing the caller; use `FileInstance.flush()` directly for
         stricter guarantees.
         """
+        _file_instance: Optional[FileInstance] = None
         # Attempt to flush the original stream and always attempt to flush the file instance.
         with self._file_lock:
-            try:
-                if not self.original_stream.closed:
+            if self.file_instance:
+                _file_instance = self.file_instance
+        try:
+            if not self.original_stream.closed:
+                try:
+                    self.original_stream.flush()
+                except OSError as exc:
                     try:
-                        self.original_stream.flush()
-                    except OSError as exc:
-                        try:
-                            sys.stderr.write(
-                                f"{CONST.MODULE_NAME} I/O error flushing original stream: {exc}\n"
-                            )
-                        except OSError:
-                            pass
-            finally:
-                if self.file_instance:
-                    try:
-                        self.file_instance.flush()
-                    except (OSError, ValueError):
-                        # don't let file flush failures propagate from a best-effort flush
+                        sys.stderr.write(
+                            f"{CONST.MODULE_NAME} I/O error flushing original stream: {exc}\n"
+                        )
+                    except OSError:
                         pass
+        finally:
+            if _file_instance:
+                try:
+                    _file_instance.flush()
+                except (OSError, ValueError):
+                    # don't let file flush failures propagate from a best-effort flush
+                    pass
