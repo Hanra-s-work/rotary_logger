@@ -8,3 +8,5 @@ lenv
 .env
 menv
 .vscode
+# No temporary files
+*tmp*

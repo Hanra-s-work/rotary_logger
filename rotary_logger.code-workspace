@@ -44,6 +44,7 @@
 			"python.version",
 			"settings.json"
 		],
+		"asperheader.extensionName": "rotary_logger",
 		"asperheader.promptToCreateIfMissing": true,
 		"asperheader.useWorkspaceNameWhenAvailable": true,
 		"asperheader.projectDescription": "A module that provides a universal python light on iops way of logging to files your program execution.",
