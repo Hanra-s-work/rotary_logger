@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: tee_stream.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 10:11:11 01-11-2025
+# LAST Modified: 10:31:10 01-11-2025
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -58,7 +58,7 @@ class TeeStream:
 
     def __init__(
         self,
-        root: Union[Path, FileInstance],
+        root: Union[str, Path, FileInstance],
         original_stream: TextIO,
         *,
         max_size_mb: Optional[int] = None,
@@ -132,9 +132,22 @@ class TeeStream:
             if not isinstance(self.mode, CONST.StdMode):
                 return ""
             _mode = self.mode
-        _prefix: Optional[CONST.Prefix] = _file_inst.get_prefix()
 
-        if not _prefix or not _file_inst.get_log_to_file():
+        # Fast-path: if logging to file is disabled, skip prefix work.
+        try:
+            if not _file_inst.get_log_to_file():
+                return ""
+        except (OSError, ValueError, AttributeError):
+            # Defensive: don't allow file-side errors to break stdout/stderr
+            return ""
+
+        try:
+            _prefix = _file_inst.get_prefix()
+        except (OSError, ValueError, AttributeError):
+            # Defensive: if FileInstance misbehaves, return no prefix
+            return ""
+
+        if not _prefix:
             return ""
         if _prefix.std_err and _mode == CONST.StdMode.STDERR:
             return CONST.CORRECT_PREFIX[CONST.StdMode.STDERR] + CONST.SPACE
@@ -154,19 +167,22 @@ class TeeStream:
         write on the caller thread (with known error handling), then
         delegates buffered file writes to `FileInstance.write()`.
         """
-        _tmp_message: str = ""
+        _tmp_message: str = message
         _file_instance: Optional[FileInstance] = None
         with self._file_lock:
-            _tmp_message = message
             _file_instance = self.file_instance
 
         try:
-            self.original_stream.write(message)
+            # Always attempt to write to the original stream
+            self.original_stream.write(_tmp_message)
         except BrokenPipeError:
             if self.error_mode in (CONST.ErrorMode.EXIT, CONST.ErrorMode.EXIT_NO_PIPE):
                 sys.exit(CONST.ERROR)
             elif self.error_mode in (CONST.ErrorMode.WARN, CONST.ErrorMode.WARN_NO_PIPE):
-                sys.stderr.write(CONST.BROKEN_PIPE_ERROR)
+                try:
+                    sys.stderr.write(CONST.BROKEN_PIPE_ERROR)
+                except OSError:
+                    pass
         except OSError as exc:
             # Unexpected I/O error writing to original stream: report and continue
             try:
@@ -177,16 +193,34 @@ class TeeStream:
                 # swallow any errors writing to stderr during shutdown
                 pass
 
+        # If there's no file instance configured, nothing more to do
         if not _file_instance:
             return
 
-        if not _file_instance.get_log_to_file():
+        # Check whether file logging is enabled on the instance
+        try:
+            if not _file_instance.get_log_to_file():
+                return
+        except (OSError, ValueError, AttributeError):
+            # Defensive: don't allow file-side errors to break stdout/stderr
             return
 
-        _prefix: str = self._get_correct_prefix()
-        _file_instance.write(f"{_prefix}{_tmp_message}")
+        # Compute prefix and write to file; protect against file-side errors
+        try:
+            _prefix: str = self._get_correct_prefix()
+        except (OSError, ValueError, AttributeError):
+            _prefix = ""
 
-    def flush(self):
+        try:
+            _file_instance.write(f"{_prefix}{_tmp_message}")
+        except (OSError, ValueError):
+            try:
+                sys.stderr.write(
+                    f"{CONST.MODULE_NAME} Error writing to log file\n")
+            except OSError:
+                pass
+
+    def flush(self) -> None:
         """Best-effort flush of terminal and buffered file output.
 
         The call will attempt to flush both the original stream and
@@ -195,25 +229,33 @@ class TeeStream:
         stricter guarantees.
         """
         _file_instance: Optional[FileInstance] = None
-        # Attempt to flush the original stream and always attempt to flush the file instance.
+        # Snapshot the file instance under lock
         with self._file_lock:
             if self.file_instance:
                 _file_instance = self.file_instance
-        try:
-            if not self.original_stream.closed:
+
+        # Flush the original stream first (best-effort)
+        if not self.original_stream.closed:
+            try:
+                self.original_stream.flush()
+            except OSError as exc:
                 try:
-                    self.original_stream.flush()
-                except OSError as exc:
-                    try:
-                        sys.stderr.write(
-                            f"{CONST.MODULE_NAME} I/O error flushing original stream: {exc}\n"
-                        )
-                    except OSError:
-                        pass
-        finally:
-            if _file_instance:
-                try:
-                    _file_instance.flush()
-                except (OSError, ValueError):
-                    # don't let file flush failures propagate from a best-effort flush
+                    sys.stderr.write(
+                        f"{CONST.MODULE_NAME} I/O error flushing original stream: {exc}\n"
+                    )
+                except OSError:
                     pass
+
+        if _file_instance:
+            try:
+                if not _file_instance.get_log_to_file():
+                    return
+            except (OSError, ValueError, AttributeError):
+                # If the check fails, continue and attempt a flush anyway.
+                pass
+
+            try:
+                _file_instance.flush()
+            except (OSError, ValueError):
+                # don't let file flush failures propagate from a best-effort flush
+                pass
