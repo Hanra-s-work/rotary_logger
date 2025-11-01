@@ -48,8 +48,30 @@ def test_unwritable_root_fallback() -> None:
     fall back to the package default log folder.
     """
     rl = RotaryLogger()
-    result = rl._verify_user_log_path(Path('/root'))
-    assert result == CONST.DEFAULT_LOG_FOLDER
+    # When tests run as root, /root may be writable. Make the test robust by
+    # checking writability first and asserting the expected behavior.
+    candidate = Path('/root')
+    result = rl._verify_user_log_path(candidate)
+    try:
+        # If we can create a temporary file in /root/logs then the system
+        # permits writing there (likely running as root), so the function
+        # should return the candidate-with-logs path. Otherwise it should
+        # fall back to the default folder.
+        writable = False
+        testdir = candidate / CONST.LOG_FOLDER_BASE_NAME
+        testdir.mkdir(parents=True, exist_ok=True)
+        testfile = testdir / ".rotary_write_test_check"
+        with open(testfile, "w", encoding="utf-8") as fh:
+            fh.write("x")
+        testfile.unlink()
+        writable = True
+    except OSError:
+        writable = False
+
+    if writable:
+        assert result == candidate / CONST.LOG_FOLDER_BASE_NAME
+    else:
+        assert result == CONST.DEFAULT_LOG_FOLDER
 
 
 def test_tmpdir_accepted(tmp_path: Path) -> None:
