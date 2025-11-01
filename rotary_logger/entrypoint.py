@@ -1,6 +1,6 @@
-""" 
+"""
 # +==== BEGIN rotary_logger =================+
-# LOGO: 
+# LOGO:
 # ..........####...####..........
 # ......###.....#.#########......
 # ....##........#.###########....
@@ -22,8 +22,8 @@
 # PROJECT: rotary_logger
 # FILE: entrypoint.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 5:12:26 01-11-2025
-# DESCRIPTION: 
+# LAST Modified: 7:29:41 01-11-2025
+# DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
 # COPYRIGHT: (c) Asperguide
@@ -31,7 +31,9 @@
 # // AR
 # +==== END rotary_logger =================+
 """
+import sys
 import signal
+import argparse
 
 try:
     from . import constants as CONST
@@ -68,13 +70,41 @@ class Tee:
         self.override: bool = override
         self.ignore_interrupts: bool = ignore_interrupts
         self.output_error: CONST.ErrorMode = output_error
-        # Apply runtime signal handling if requested
+        self.args = self._parse_args()
         self._handle_interrupts_if_required()
+
+        # Create and configure the logger
         # Create and configure the high-level RotaryLogger instance
         self.rotary_logger: RotaryLogger = RotaryLogger(
             log_to_file=True,
-            override=self.override,
+            override=self.args.overwrite,
+            merge_streams=self.args.merge,
         )
+
+    def _parse_args(self):
+        parser = argparse.ArgumentParser(
+            description="Python-powered tee replacement with rotation"
+        )
+        parser.add_argument(
+            "files", nargs="*", help="Destination log files (defaults to rotary_logger folder)"
+        )
+        parser.add_argument(
+            "-a", "--append", dest="overwrite", action="store_false",
+            help="Append to the output files instead of overwriting"
+        )
+        parser.add_argument(
+            "-m", "--merge", action="store_true",
+            help="Merge stdout and stderr into a single log file"
+        )
+        parser.add_argument(
+            "-i", "--ignore-interrupts", action="store_true",
+            help="Ignore Ctrl+C (SIGINT)"
+        )
+        parser.add_argument(
+            "-s", "--max-size", type=int, default=None,
+            help="Maximum log file size in MB before rotation"
+        )
+        return parser.parse_args()
 
     def _handle_interrupts_if_required(self) -> None:
         """Ignore SIGINT (KeyboardInterrupt) when configured.
@@ -84,7 +114,7 @@ class Tee:
         initialization and is a no-op when interrupts should be
         processed normally.
         """
-        if self.ignore_interrupts:
+        if self.args.ignore_interrupts:
             signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     def _pipe_check(self) -> None:
@@ -99,3 +129,27 @@ class Tee:
         """
         if self.output_error == CONST.ErrorMode.WARN_NO_PIPE and CONST.IS_PIPE:
             return
+
+    def run(self):
+        """Main execution loop (like the UNIX tee)."""
+        self.rotary_logger.start_logging(
+            log_folder=None,
+            max_filesize=self.args.max_size,
+            merged=self.args.merge
+        )
+
+        try:
+            for line in sys.stdin:
+                # This goes to both terminal and log file
+                print(line, end="")
+        except KeyboardInterrupt:
+            if not self.args.ignore_interrupts:
+                raise
+
+
+def main():
+    Tee().run()
+
+
+if __name__ == "__main__":
+    main()
