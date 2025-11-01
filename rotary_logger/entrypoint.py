@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: entrypoint.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 8:55:33 01-11-2025
+# LAST Modified: 13:54:54 01-11-2025
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -34,6 +34,7 @@
 import sys
 import signal
 import argparse
+from pathlib import Path
 
 try:
     from . import constants as CONST
@@ -128,11 +129,27 @@ class Tee:
 
     def run(self):
         """Main execution loop (like UNIX `tee`)."""
-        _log_to_file = True
-        if self.args.files is None:
+        # Determine whether file logging is requested and normalise the
+        # provided files argument into a single Path (or None). The
+        # argparse `files` is a list (nargs='*'), so map it to a Path if
+        # present; if multiple paths are provided, use the first and warn.
+        if not self.args.files:
             _log_to_file = False
+            _log_folder = None
+        else:
+            _log_to_file = True
+            if len(self.args.files) > 1:
+                # Prefer the first provided argument but notify the user.
+                try:
+                    sys.stderr.write(
+                        f"{CONST.MODULE_NAME} Multiple destination files provided; using first: {self.args.files[0]}\n"
+                    )
+                except OSError:
+                    pass
+            _log_folder = Path(self.args.files[0])
+
         self.rotary_logger.start_logging(
-            log_folder=self.args.files or None,
+            log_folder=_log_folder,
             max_filesize=self.args.max_size,
             merged=self.args.merge,
             log_to_file=_log_to_file
