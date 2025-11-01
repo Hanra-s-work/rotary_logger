@@ -1,3 +1,36 @@
+""" 
+# +==== BEGIN rotary_logger =================+
+# LOGO: 
+# ..........####...####..........
+# ......###.....#.#########......
+# ....##........#.###########....
+# ...#..........#.############...
+# ...#..........#.#####.######...
+# ..#.....##....#.###..#...####..
+# .#.....#.##...#.##..##########.
+# #.....##########....##...######
+# #.....#...##..#.##..####.######
+# .#...##....##.#.##..###..#####.
+# ..#.##......#.#.####...######..
+# ..#...........#.#############..
+# ..#...........#.#############..
+# ...##.........#.############...
+# ......#.......#.#########......
+# .......#......#.########.......
+# .........#####...#####.........
+# /STOP
+# PROJECT: rotary_logger
+# FILE: test_constants.py
+# CREATION DATE: 01-11-2025
+# LAST Modified: 4:31:14 01-11-2025
+# DESCRIPTION: 
+# A module that provides a universal python light on iops way of logging to files your program execution.
+# /STOP
+# COPYRIGHT: (c) Asperguide
+# PURPOSE: This is the file in charge of testing the critical variables of the constants file to make sure that they are still accurate.
+# // AR
+# +==== END rotary_logger =================+
+"""
 from rotary_logger import constants as CONST
 
 

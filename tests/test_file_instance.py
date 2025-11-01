@@ -1,3 +1,36 @@
+""" 
+# +==== BEGIN rotary_logger =================+
+# LOGO: 
+# ..........####...####..........
+# ......###.....#.#########......
+# ....##........#.###########....
+# ...#..........#.############...
+# ...#..........#.#####.######...
+# ..#.....##....#.###..#...####..
+# .#.....#.##...#.##..##########.
+# #.....##########....##...######
+# #.....#...##..#.##..####.######
+# .#...##....##.#.##..###..#####.
+# ..#.##......#.#.####...######..
+# ..#...........#.#############..
+# ..#...........#.#############..
+# ...##.........#.############...
+# ......#.......#.#########......
+# .......#......#.########.......
+# .........#####...#####.........
+# /STOP
+# PROJECT: rotary_logger
+# FILE: test_file_instance.py
+# CREATION DATE: 01-11-2025
+# LAST Modified: 4:29:56 01-11-2025
+# DESCRIPTION: 
+# A module that provides a universal python light on iops way of logging to files your program execution.
+# /STOP
+# COPYRIGHT: (c) Asperguide
+# PURPOSE: This is the set of tests in charge of making sure the file_instance class works as expected.
+# // AR
+# +==== END rotary_logger =================+
+"""
 from pathlib import Path
 
 from rotary_logger.file_instance import FileInstance

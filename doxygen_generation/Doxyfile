@@ -1,3 +1,36 @@
+#
+#  +==== BEGIN rotary_logger =================+
+#  LOGO: 
+#  ..........####...####..........
+#  ......###.....#.#########......
+#  ....##........#.###########....
+#  ...#..........#.############...
+#  ...#..........#.#####.######...
+#  ..#.....##....#.###..#...####..
+#  .#.....#.##...#.##..##########.
+#  #.....##########....##...######
+#  #.....#...##..#.##..####.######
+#  .#...##....##.#.##..###..#####.
+#  ..#.##......#.#.####...######..
+#  ..#...........#.#############..
+#  ..#...........#.#############..
+#  ...##.........#.############...
+#  ......#.......#.#########......
+#  .......#......#.########.......
+#  .........#####...#####.........
+#  /STOP
+#  PROJECT: rotary_logger
+#  FILE: Doxyfile
+#  CREATION DATE: 01-11-2025
+#  LAST Modified: 4:34:32 01-11-2025
+#  DESCRIPTION: 
+#  A module that provides a universal python light on iops way of logging to files your program execution.
+#  /STOP
+#  COPYRIGHT: (c) Asperguide
+#  PURPOSE: This is the configuration for the doxygen program to work appropriately.
+#  // AR
+#  +==== END rotary_logger =================+
+#
 # Doxyfile 1.10.0
 
 # This file describes the settings to be used by the documentation system
@@ -956,10 +989,11 @@ WARN_LOGFILE           =
 # spaces. See also FILE_PATTERNS and EXTENSION_MAPPING
 # Note: If this tag is empty the current directory is searched.
 
-INPUT                  = vscode/asperheader \
-                         Makefile \
-                         README.md \
+INPUT                  = Makefile \
+                         tests \
                          LICENSE \
+                         README.md \
+                         rotary_logger \
                          CONTRIBUTING.md \
                          CODE_OF_CONDUCT.md \
                          COMMIT_CONVENTION.md \

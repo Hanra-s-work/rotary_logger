@@ -1,3 +1,36 @@
+""" 
+# +==== BEGIN rotary_logger =================+
+# LOGO: 
+# ..........####...####..........
+# ......###.....#.#########......
+# ....##........#.###########....
+# ...#..........#.############...
+# ...#..........#.#####.######...
+# ..#.....##....#.###..#...####..
+# .#.....#.##...#.##..##########.
+# #.....##########....##...######
+# #.....#...##..#.##..####.######
+# .#...##....##.#.##..###..#####.
+# ..#.##......#.#.####...######..
+# ..#...........#.#############..
+# ..#...........#.#############..
+# ...##.........#.############...
+# ......#.......#.#########......
+# .......#......#.########.......
+# .........#####...#####.........
+# /STOP
+# PROJECT: rotary_logger
+# FILE: test_rotary_integration.py
+# CREATION DATE: 01-11-2025
+# LAST Modified: 4:31:57 01-11-2025
+# DESCRIPTION: 
+# A module that provides a universal python light on iops way of logging to files your program execution.
+# /STOP
+# COPYRIGHT: (c) Asperguide
+# PURPOSE: This is the file in charge of making sure that the Rotary logger class works and does what is expected of it.
+# // AR
+# +==== END rotary_logger =================+
+"""
 import sys
 import shutil
 from pathlib import Path

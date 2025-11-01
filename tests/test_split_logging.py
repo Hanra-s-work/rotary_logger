@@ -1,3 +1,36 @@
+""" 
+# +==== BEGIN rotary_logger =================+
+# LOGO: 
+# ..........####...####..........
+# ......###.....#.#########......
+# ....##........#.###########....
+# ...#..........#.############...
+# ...#..........#.#####.######...
+# ..#.....##....#.###..#...####..
+# .#.....#.##...#.##..##########.
+# #.....##########....##...######
+# #.....#...##..#.##..####.######
+# .#...##....##.#.##..###..#####.
+# ..#.##......#.#.####...######..
+# ..#...........#.#############..
+# ..#...........#.#############..
+# ...##.........#.############...
+# ......#.......#.#########......
+# .......#......#.########.......
+# .........#####...#####.........
+# /STOP
+# PROJECT: rotary_logger
+# FILE: test_split_logging.py
+# CREATION DATE: 01-11-2025
+# LAST Modified: 4:32:48 01-11-2025
+# DESCRIPTION: 
+# A module that provides a universal python light on iops way of logging to files your program execution.
+# /STOP
+# COPYRIGHT: (c) Asperguide
+# PURPOSE: This is the file in charge of testing the split logging functionality of the Rotary logger class.
+# // AR
+# +==== END rotary_logger =================+
+"""
 import sys
 from pathlib import Path
 
