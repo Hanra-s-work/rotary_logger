@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: file_instance.py
 # CREATION DATE: 30-10-2025
-# LAST Modified: 5:17:18 01-11-2025
+# LAST Modified: 9:9:21 01-11-2025
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -32,6 +32,7 @@
 # +==== END rotary_logger =================+
 """
 
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Union, Dict, List, IO, Any
@@ -63,7 +64,8 @@ class FileInstance:
         *,
         max_size_mb: Optional[int] = None,
         flush_size_kb: Optional[int] = None,
-        folder_prefix: Optional[CONST.StdMode] = None
+        folder_prefix: Optional[CONST.StdMode] = None,
+        log_to_file: bool = True
     ) -> None:
         """Create a FileInstance wrapper.
 
@@ -81,6 +83,7 @@ class FileInstance:
         # per-instance mutable defaults (avoid sharing across instances)
         self._file_lock: RLock = RLock()
         self._mode: str = "a"
+        self._log_to_file: bool = log_to_file
         self.file: Optional[CONST.FileInfo] = None
         self.override: bool = False
         self.merged: bool = True
@@ -125,6 +128,23 @@ class FileInstance:
                     # Swallow errors during destructor cleanup
                     pass
         self.file = None
+
+    def set_log_to_file(self, log_to_file: bool, *, lock: bool = True) -> None:
+        """Public wrapper to set the maximum logfile size.
+
+        Args:
+            max_size_mb: maximum size in megabytes (or an absolute byte
+                value). The value will be normalised by
+                `_set_max_size` and stored in `self.max_size` as
+                bytes.
+            lock: when True the instance lock is acquired while
+                updating the configuration.
+        """
+        if lock:
+            with self._file_lock:
+                self._log_to_file: bool = log_to_file
+                return
+        self._log_to_file: bool = log_to_file
 
     def set_max_size(self, max_size_mb: int, *, lock: bool = True) -> None:
         """Public wrapper to set the maximum logfile size.
@@ -250,6 +270,12 @@ class FileInstance:
                 self._set_filepath_child(file_path)
                 return
         self._set_filepath_child(file_path)
+
+    def get_log_to_file(self, *, lock: bool = True) -> bool:
+        if lock:
+            with self._file_lock:
+                return self._log_to_file
+        return self._log_to_file
 
     def get_mode(self, *, lock: bool = True) -> str:
         """Return the current file open mode ('w' or 'a').
@@ -542,6 +568,7 @@ class FileInstance:
         self.set_max_size(file_data.get_max_size(), lock=False)
         self.set_flush_size(file_data.get_flush_size(), lock=False)
         self.set_folder_prefix(file_data.get_folder_prefix(), lock=False)
+        self.set_log_to_file(file_data.get_log_to_file(), lock=False)
 
     def _copy(self) -> "FileInstance":
         """Return a shallow copy of this FileInstance configuration.
@@ -560,6 +587,7 @@ class FileInstance:
         tmp.set_flush_size(self.get_flush_size(), lock=False)
         tmp.set_max_size(self.get_max_size(), lock=False)
         tmp.set_folder_prefix(self.get_folder_prefix(), lock=False)
+        tmp.set_log_to_file(self.get_log_to_file(), lock=False)
         return tmp
 
     def _get_current_date(self) -> datetime:
@@ -649,27 +677,53 @@ class FileInstance:
         elif self.file and self.file.path:
             _root = self.file.path
 
+        if _root.suffix == "" and CONST.LOG_FOLDER_BASE_NAME != _root.name:
+            _root = _root / CONST.LOG_FOLDER_BASE_NAME
+        elif _root.suffix != "" and CONST.LOG_FOLDER_BASE_NAME != _root.parent:
+            _root = _root.parent / CONST.LOG_FOLDER_BASE_NAME / _root.name
+
         year_dir = _root / str(now.year)
         month_dir = year_dir / f"{now.month:02d}"
         day_dir = month_dir / f"{now.day:02d}"
         if self.folder_prefix and self.folder_prefix in CONST.CORRECT_FOLDER:
             day_dir = day_dir / CONST.CORRECT_FOLDER[self.folder_prefix]
-        day_dir.mkdir(parents=True, exist_ok=True)
+        with self._file_lock:
+            if self._log_to_file:
+                day_dir.mkdir(parents=True, exist_ok=True)
         filename = self._get_filename()
         return day_dir / filename
+
+    def _looks_like_directory(self, dir_path: Path) -> bool:
+        if not str(dir_path):
+            return False
+        if dir_path.suffix == "":
+            return True
+        # If it already exists and is a directory, fine
+        if dir_path.exists():
+            return dir_path.is_dir()
+
+        # If the parent exists and is writable, assume it *could* be a directory
+        str_path: str = str(dir_path)
+        return str_path.endswith(os.sep) or str_path.endswith("/") or str_path.endswith("\\")
 
     def _open_file(self, file_path: Path) -> CONST.FileInfo:
         """Function in charge of opening a file instance so that the program can write to it.
         """
         _node: CONST.FileInfo = CONST.FileInfo()
         _node.path = Path(file_path)
+        if self._looks_like_directory(_node.path):
+            _node.path = self._create_log_path()
         _node.path.parent.mkdir(parents=True, exist_ok=True)
-        _node.descriptor = open(
-            file_path,
-            self._mode,
-            encoding=self.encoding,
-            newline="\n"
-        )
+        with self._file_lock:
+            if self._log_to_file:
+                _node.descriptor = open(
+                    _node.path,
+                    self._mode,
+                    encoding=self.encoding,
+                    newline="\n"
+                )
+            else:
+                _node.descriptor = None
         if file_path.exists():
             _node.written_bytes = file_path.stat().st_size
         else:
@@ -711,7 +765,7 @@ class FileInstance:
                 return self._close_file_inner()
         return self._close_file_inner()
 
-    def _flush_buffer(self):
+    def _flush_buffer(self) -> None:
         """Internal: detach pending buffer and write to disk.
 
         Implements the swap-buffer pattern: capture and clear the in-memory
@@ -725,6 +779,9 @@ class FileInstance:
             to_write = self._buffer
             # detach buffer so writers won't block on I/O
             self._buffer = []
+
+            if not self._log_to_file:
+                return
 
             # ensure file and descriptor exist and are open (open under lock)
             if not self.file or not getattr(self.file, "descriptor", None) or getattr(self.file.descriptor, "closed", False):
