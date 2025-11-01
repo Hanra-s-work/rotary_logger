@@ -997,7 +997,6 @@ INPUT                  = Makefile \
                          CONTRIBUTING.md \
                          CODE_OF_CONDUCT.md \
                          COMMIT_CONVENTION.md \
-                         docs_input \
                          docs_input/constants.md \
                          docs_input/file_instance.md \
                          docs_input/rotary_logger.md \

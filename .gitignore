@@ -6,6 +6,7 @@
 **/wenv
 lenv
 .env
+.venv
 menv
 .vscode
 # No temporary files
