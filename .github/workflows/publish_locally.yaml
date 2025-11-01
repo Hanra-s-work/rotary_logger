@@ -178,10 +178,14 @@ jobs:
       - name: Test with pytest
         run: |
           cd ${{env.CWD}}
-          if [ -n "${SUDO_UID:-}" ]; then
-              DOCKER_EXTRA_ARGS="--user ${SUDO_UID}:${SUDO_GID}"
-              echo "Using DOCKER_EXTRA_ARGS='${DOCKER_EXTRA_ARGS}' to run container as the original user"
-          fi
+          # Determine a host UID:GID to run the container with so files created by
+          # the container are owned by the same user as on the runner. Prefer
+          # SUDO_UID/SUDO_GID when present (e.g. when actions run with sudo),
+          # otherwise fall back to the current user id from `id -u`/`id -g`.
+          HOST_UID=${SUDO_UID:-$(id -u)}
+          HOST_GID=${SUDO_GID:-$(id -g)}
+          DOCKER_EXTRA_ARGS="--user ${HOST_UID}:${HOST_GID}"
+          echo "Using DOCKER_EXTRA_ARGS='${DOCKER_EXTRA_ARGS}' to run container with host uid/gid"
           DOCKER_IMAGE="python:${{matrix.python-version}}-slim"
           docker run --rm \
             -t \
