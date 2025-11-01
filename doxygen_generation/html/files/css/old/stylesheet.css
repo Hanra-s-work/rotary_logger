@@ -1,0 +1,53 @@
+/*
+** EPITECH PROJECT, 2023
+** my_zappy [fed34_prox_vm]
+** File description:
+** stylesheet.css
+*/
+
+* {
+    font-family: 'Times New Roman', Times, serif;
+}
+
+body {
+    background-color: var(--page-background-color);
+    color: var(--page-foreground-color);
+}
+
+header,
+.header {
+    padding-top: 0;
+    padding-left: 0;
+    padding-right: 0;
+    display: flex;
+    flex-direction: row;
+}
+
+.contents {
+    background-color: aliceblue;
+}
+
+a {
+    color: rgb(28, 106, 208);
+    text-decoration: none;
+    font-weight: normal;
+}
+
+a:hover {
+    text-decoration: underline;
+    font-style: italic;
+}
+
+a:active {
+    color: deepskyblue;
+    text-decoration: none;
+}
+
+
+footer {
+    padding-left: 0;
+    padding-right: 0;
+    padding-bottom: 0;
+    display: flex;
+    flex-direction: column;
+}
