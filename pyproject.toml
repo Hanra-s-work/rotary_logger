@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: pyproject.toml
 # CREATION DATE: 29-10-2025
-# LAST Modified: 7:36:41 01-11-2025
+# LAST Modified: 7:40:51 01-11-2025
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -77,7 +77,6 @@ classifiers = [
     "Operating System :: OS Independent",
     # Specify the Python versions you support here.
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
