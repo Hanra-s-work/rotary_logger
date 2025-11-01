@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: constants.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 7:55:6 01-11-2025
+# LAST Modified: 10:34:25 01-11-2025
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -109,7 +109,7 @@ class ErrorMode(Enum):
     EXIT_NO_PIPE = ERROR_MODE_EXIT_NO_PIPE
 
 
-FILE_LOG_DATE_FORMAT: str = "%Y_%m_%dT%Hh%Mm%Ss.log"
+FILE_LOG_DATE_FORMAT: str = "%Y_%m_%dT%Hh%Mm%Ss"
 
 
 @dataclass
