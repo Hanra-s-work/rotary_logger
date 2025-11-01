@@ -687,9 +687,15 @@ class FileInstance:
         day_dir = month_dir / f"{now.day:02d}"
         if self.folder_prefix and self.folder_prefix in CONST.CORRECT_FOLDER:
             day_dir = day_dir / CONST.CORRECT_FOLDER[self.folder_prefix]
+
+        # Snapshot the _log_to_file flag under lock, then perform mkdir
+        # outside the lock to avoid blocking other callers on filesystem I/O.
+        _should_create = False
         with self._file_lock:
-            if self._log_to_file:
-                day_dir.mkdir(parents=True, exist_ok=True)
+            _should_create = bool(self._log_to_file)
+
+        if _should_create:
+            day_dir.mkdir(parents=True, exist_ok=True)
         filename = self._get_filename()
         return day_dir / filename
 
@@ -713,17 +719,31 @@ class FileInstance:
         _node.path = Path(file_path)
         if self._looks_like_directory(_node.path):
             _node.path = self._create_log_path()
+        # Ensure parent directory exists before attempting to open the file.
         _node.path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Snapshot whether we should open the descriptor under lock, then
+        # perform the potentially blocking open() outside the lock.
+        should_open = False
         with self._file_lock:
-            if self._log_to_file:
-                _node.descriptor = open(
+            should_open = bool(self._log_to_file)
+
+        descriptor = None
+        if should_open:
+            try:
+                descriptor = open(
                     _node.path,
                     self._mode,
                     encoding=self.encoding,
                     newline="\n"
                 )
-            else:
-                _node.descriptor = None
+            except (OSError, ValueError):
+                # Opening failed; keep descriptor as None. Caller will handle.
+                descriptor = None
+
+        # Assign descriptor under the lock to keep state updates atomic.
+        with self._file_lock:
+            _node.descriptor = descriptor
         if file_path.exists():
             _node.written_bytes = file_path.stat().st_size
         else:

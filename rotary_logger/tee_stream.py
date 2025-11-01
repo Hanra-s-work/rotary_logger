@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: tee_stream.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 10:31:10 01-11-2025
+# LAST Modified: 10:38:56 01-11-2025
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
