@@ -23,7 +23,7 @@
 # PROJECT: rotary_logger
 # FILE: action_test.sh
 # CREATION DATE: 01-11-2025
-# LAST Modified: 6:1:36 01-11-2025
+# LAST Modified: 6:32:18 02-11-2025
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -85,15 +85,21 @@ function run_tests {
             -w /work \
             ${DOCKER_EXTRA_ARGS:-} \
             "$DOCKER_IMAGE" \
-            /bin/bash -c "set -euo pipefail \
-                && python -V \
+            /bin/bash -c 'set -euo pipefail \
+                && echo "Python version: $(python -V)" \
+                && echo "Setting up virtual environment" \
                 && python -m venv .venv \
+                && echo "Activating virtual environment" \
                 && . .venv/bin/activate \
+                && echo "Upgrading pip" \
                 && pip install --upgrade pip \
+                && echo "Installing dependencies" \
                 && pip install -r requirements.txt \
+                && echo "Installing pytest" \
                 && pip install pytest \
-                && pytest -q \
-            "
+                && echo "Running tests" \
+                && pytest -s \
+            '
 
         STATUS=$?
         update_global_status $STATUS
