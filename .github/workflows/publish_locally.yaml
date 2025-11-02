@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: python-package.yml
 # CREATION DATE: 29-10-2025
-# LAST Modified: 6:38:39 01-11-2025
+# LAST Modified: 6:40:17 02-11-2025
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -33,7 +33,7 @@
 #
 name: rotary_logger-gh-packages
 
-# version: 1.0.8
+# version: 1.0.12
 # Version log:
 # 1.0.0: Initial version
 # 1.0.1: Add the xvfb library to the actions for any graphical environments
@@ -45,11 +45,14 @@ name: rotary_logger-gh-packages
 # 1.0.7: Update the code to only update the version of the files based on the present ones.
 # 1.0.8: Update the code to install the package before running the unit tests
 # 1.0.9: Update code to use python slim containers instead of full fledged ubuntu containers.
-
+# 1.0.10: Update the triggers to not run when documentation is released
+# 1.0.11: Update code to use python slim containers when terminal graphic interfaces where not required, otherwise fallback on the full fledged containers
+# 1.0.12: Update code to use non-root containers if required.
 on:
   push:
     tags:
       - "v*.*.*"
+      - "!v*.*.*-doc"
   workflow_dispatch:
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
@@ -178,31 +181,71 @@ jobs:
       - name: Test with pytest
         run: |
           cd ${{env.CWD}}
-          # Determine a host UID:GID to run the container with so files created by
-          # the container are owned by the same user as on the runner. Prefer
-          # SUDO_UID/SUDO_GID when present (e.g. when actions run with sudo),
-          # otherwise fall back to the current user id from `id -u`/`id -g`.
-          HOST_UID=${SUDO_UID:-$(id -u)}
-          HOST_GID=${SUDO_GID:-$(id -g)}
-          DOCKER_EXTRA_ARGS="--user ${HOST_UID}:${HOST_GID}"
-          echo "Using DOCKER_EXTRA_ARGS='${DOCKER_EXTRA_ARGS}' to run container with host uid/gid"
-          DOCKER_IMAGE="python:${{matrix.python-version}}-slim"
-          docker run --rm \
-            -t \
-            --name "python${{matrix.python-version}}_test" \
-            -v "$(pwd)":/work \
-            -w /work \
-            ${DOCKER_EXTRA_ARGS:-} \
-            "$DOCKER_IMAGE" \
-            /bin/bash -c "set -euo pipefail \
-                && python -V \
+          TRUE="0"
+          FALSE="1"
+          TESTING_TUI=$FALSE
+          NON_ROOT=$TRUE
+
+          if [ "$NON_ROOT" == "$TRUE" ]; then
+            HOST_UID=${SUDO_UID:-$(id -u)}
+            HOST_GID=${SUDO_GID:-$(id -g)}
+            DOCKER_EXTRA_ARGS="--user ${HOST_UID}:${HOST_GID}"
+            echo "Using DOCKER_EXTRA_ARGS='${DOCKER_EXTRA_ARGS}' to run container with host uid/gid"
+          fi
+
+          if [ "$TESTING_TUI" == "$FALSE" ]; then
+            DOCKER_IMAGE="python:${{matrix.python-version}}-slim"
+            docker run --rm \
+              -t \
+              --name "python${{matrix.python-version}}_test" \
+              -v "$(pwd)":/work \
+              -w /work \
+              ${DOCKER_EXTRA_ARGS:-} \
+              "$DOCKER_IMAGE" \
+              /bin/bash -c 'set -euo pipefail \
+                && echo "Python version: $(python -V)" \
+                && echo "Setting up virtual environment" \
                 && python -m venv .venv \
+                && echo "Activating virtual environment" \
                 && . .venv/bin/activate \
+                && echo "Upgrading pip" \
                 && pip install --upgrade pip \
+                && echo "Installing dependencies" \
                 && pip install -r requirements.txt \
+                && echo "Installing pytest" \
                 && pip install pytest \
+                && echo "Running tests" \
                 && pytest -s \
-            "
+              '
+          else
+            docker run --rm \
+              -t \
+              -e DEBIAN_FRONTEND=noninteractive \
+              -v "$(pwd)":"/home" \
+              ${DOCKER_EXTRA_ARGS:-} \
+              ubuntu \
+              /bin/bash -c "
+                echo 'Updating ubuntu version' && \
+                apt update && apt upgrade -y && \
+                echo 'Installing required dependencies' && \
+                apt install -y xvfb software-properties-common && \
+                echo 'Adding python deadsnakes repository' && \
+                add-apt-repository -y ppa:deadsnakes/ppa && \
+                apt-get update && \
+                echo 'Installing required python versions (${{matrix.python-version}})' && \
+                apt install -y python${{matrix.python-version}} python${{matrix.python-version}}-venv python3-pip python${{matrix.python-version}}-dev && \
+                echo 'Setting the installed python version as the default version' && \
+                update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${{matrix.python-version}} 1 && \
+                update-alternatives --install /usr/bin/python python /usr/bin/python${{matrix.python-version}} 1 && \
+                echo 'Entering the folder containing the code' && \
+                cd /home && \
+                echo 'Installing requirements' && \
+                pip3 install -r requirements.txt  --break-system-packages && \
+                pip3 install pytest  --break-system-packages && \
+                echo 'Running the tests' && \
+                pytest -s
+              "
+          fi
 
       - name: Update author
         run: |
