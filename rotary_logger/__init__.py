@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: __init__.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 9:14:12 01-11-20255
+# LAST Modified: 3:58:59 02-11-2025
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -37,21 +37,21 @@ try:
     from rotary_logger.rotary_logger_cls import RotaryLogger
     from rotary_logger.tee_stream import TeeStream
     from rotary_logger.file_instance import FileInstance
-    from rotary_logger import constants as CONST
+    from rotary_logger import constants as RL_CONST
 except ImportError:
     try:
         from .entrypoint import Tee
         from .rotary_logger_cls import RotaryLogger
         from .tee_stream import TeeStream
         from .file_instance import FileInstance
-        from . import constants as CONST
+        from . import constants as RL_CONST
     except ImportError:
         try:
             from entrypoint import Tee
             from rotary_logger_cls import RotaryLogger
             from tee_stream import TeeStream
             from file_instance import FileInstance
-            import constants as CONST
+            import constants as RL_CONST
         except ImportError as e:
             raise RuntimeError("Failed to import required dependencies") from e
 
@@ -60,5 +60,5 @@ __all__ = [
     "RotaryLogger",
     "TeeStream",
     "FileInstance",
-    "CONST"
+    "RL_CONST"
 ]

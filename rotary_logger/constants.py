@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: constants.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 10:34:25 01-11-2025
+# LAST Modified: 3:52:51 02-11-2025
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -154,7 +154,7 @@ CORRECT_PREFIX: Dict[StdMode, str] = {
 
 LOG_TO_FILE_ENV: bool = os.environ.get(
     "LOG_TO_FILE",
-    ""
+    "true"
 ).lower() in ("1", "true", "yes")
 
 RAW_LOG_FOLDER_ENV: str = os.environ.get(

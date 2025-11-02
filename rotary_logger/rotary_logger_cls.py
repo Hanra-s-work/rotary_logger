@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: rotary_logger.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 13:19:15 01-11-2025
+# LAST Modified: 4:55:27 02-11-2025
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -38,7 +38,7 @@ import sys
 import atexit
 from warnings import warn
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, List, Callable
 from threading import RLock
 
 try:
@@ -95,6 +95,18 @@ class RotaryLogger:
         self.file_data.set_merged(merge_streams)
         self.file_data.set_prefix(self.prefix)
         self.file_data.set_override(override)
+        # Stream instance tracking
+        self.stdout_stream: Optional[TeeStream] = None
+        self.stderr_stream: Optional[TeeStream] = None
+        self.stdin_stream: Optional[TeeStream] = None
+        # Logging status
+        self.paused: bool = False
+        # Track whether we've registered atexit handlers to avoid duplicates
+        self._atexit_registered: bool = False
+        self._registered_flushers: List[Callable] = []
+
+    def __del__(self) -> None:
+        self.stop_logging()
 
     def __call__(self, *args: Any, **kwds: Any) -> None:
         """Convenience: allow the instance to be called to start logging.
@@ -278,13 +290,13 @@ class RotaryLogger:
         # `RotaryLogger._file_lock` while the TeeStream initializer may
         # acquire `FileInstance` locks. Then assign the globals under the
         # lock to keep the replacement atomic.
-        tee_out = TeeStream(
+        _stdout_stream = TeeStream(
             stdout_inst,
             sys.stdout,
             mode=CONST.StdMode.STDOUT,
             log_to_file=log_to_file
         )
-        tee_err = TeeStream(
+        _stderr_stream = TeeStream(
             stderr_inst,
             sys.stderr,
             mode=CONST.StdMode.STDERR,
@@ -292,12 +304,180 @@ class RotaryLogger:
         )
 
         with self._file_lock:
-            sys.stdout = tee_out
-            sys.stderr = tee_err
+            sys.stdout = _stdout_stream
+            sys.stderr = _stderr_stream
+            self.stdout_stream = _stdout_stream
+            self.stderr_stream = _stderr_stream
 
-            # Ensure final flush at exit
-            atexit.register(sys.stdout.flush)
-            atexit.register(sys.stderr.flush)
+            # Ensure final flush at exit, but only register once
+            if not self._atexit_registered:
+                self._registered_flushers = [
+                    self.stdout_stream.flush, self.stderr_stream.flush
+                ]
+                try:
+                    for f in self._registered_flushers:
+                        atexit.register(f)
+                    self._atexit_registered = True
+                except (TypeError, AttributeError):
+                    # Registration may fail if the objects are not callable
+                    # or lack attributes; handle only the expected errors.
+                    # Clear the list to avoid false expectations.
+                    self._registered_flushers = []
+
+    def pause_logging(self) -> bool:
+        """Toggle pause state.
+
+        This function is thread-safe: internal state and global stream
+        replacements are updated while holding `_file_lock`. Flushes are
+        performed outside the lock to avoid blocking other threads.
+        """
+        # Snapshot streams and current state under the lock, and perform
+        # the sys.* assignment while still holding the lock to avoid races.
+        to_flush = []
+        with self._file_lock:
+            current = self.paused
+            out = self.stdout_stream
+            err = self.stderr_stream
+            inn = self.stdin_stream
+            if current:
+                # currently paused -> resume logging
+                self.paused = False
+                if out:
+                    sys.stdout = out
+                if err:
+                    sys.stderr = err
+                if inn:
+                    sys.stdin = inn
+                # after resuming, we want to flush the streams to ensure
+                # no buffered data is left behind
+                if out:
+                    to_flush.append(out)
+                if err:
+                    to_flush.append(err)
+                if inn:
+                    to_flush.append(inn)
+            else:
+                # currently running -> pause logging
+                self.paused = True
+                if out:
+                    sys.stdout = out.original_stream
+                    to_flush.append(out)
+                if err:
+                    sys.stderr = err.original_stream
+                    to_flush.append(err)
+                if inn:
+                    sys.stdin = inn.original_stream
+                    to_flush.append(inn)
+
+        # Perform flushes outside the lock (may do I/O)
+        for s in to_flush:
+            try:
+                s.flush()
+            except (OSError, ValueError):
+                # I/O related issues (broken pipe, closed file, etc.)
+                # may be raised during flush. Catch those specifically.
+                pass
+
+        return self.paused
+
+    def resume_logging(self) -> bool:
+        """Explicitly resume logging (idempotent).
+
+        Updates internal state and installs the TeeStreams under the
+        lock, then flushes outside the lock.
+        """
+        to_flush = []
+        with self._file_lock:
+            self.paused = False
+            out = self.stdout_stream
+            err = self.stderr_stream
+            inn = self.stdin_stream
+            if out:
+                sys.stdout = out
+                to_flush.append(out)
+            if err:
+                sys.stderr = err
+                to_flush.append(err)
+            if inn:
+                sys.stdin = inn
+                to_flush.append(inn)
+
+        for s in to_flush:
+            try:
+                s.flush()
+            except (OSError, ValueError):
+                pass
+        return self.paused
+
+    def is_redirected(self, stream: CONST.StdMode) -> bool:
+        _stderr_stream: Optional[TeeStream] = None
+        _stdout_stream: Optional[TeeStream] = None
+        _stdin_stream: Optional[TeeStream] = None
+        with self._file_lock:
+            _stderr_stream = self.stderr_stream
+            _stdout_stream = self.stdout_stream
+            _stdin_stream = self.stdin_stream
+        if stream == CONST.StdMode.STDERR:
+            if _stderr_stream:
+                return True
+            return False
+        if stream == CONST.StdMode.STDOUT:
+            if _stdout_stream:
+                return True
+            return False
+        if stream == CONST.StdMode.STDIN:
+            if _stdin_stream:
+                return True
+            return False
+        return False
+
+    def is_logging(self) -> bool:
+        with self._file_lock:
+            # Logging is active when we have at least one installed TeeStream
+            # and the logger is not paused.
+            has_stream = bool(
+                self.stdout_stream or self.stderr_stream or self.stdin_stream
+            )
+            return has_stream and (not bool(self.paused))
+
+    def stop_logging(self) -> None:
+        """Restore original streams and stop logging.
+
+        This function updates global streams while holding the lock and
+        flushes TeeStream buffers outside the lock.
+        """
+        to_flush = []
+        with self._file_lock:
+            if self.stdout_stream:
+                sys.stdout = self.stdout_stream.original_stream
+                to_flush.append(self.stdout_stream)
+                self.stdout_stream = None
+            if self.stderr_stream:
+                sys.stderr = self.stderr_stream.original_stream
+                to_flush.append(self.stderr_stream)
+                self.stderr_stream = None
+            if self.stdin_stream:
+                sys.stdin = self.stdin_stream.original_stream
+                to_flush.append(self.stdin_stream)
+                self.stdin_stream = None
+            self.paused = False
+
+            if getattr(self, "_atexit_registered", False):
+                for f in getattr(self, "_registered_flushers", []):
+                    try:
+                        atexit.unregister(f)
+                    except ValueError:
+                        pass
+                    except AttributeError:
+                        pass
+                self._registered_flushers = []
+                self._atexit_registered = False
+
+        for s in to_flush:
+            try:
+                s.flush()
+            except (OSError, ValueError):
+                pass
 
 
 if __name__ == "__main__":
