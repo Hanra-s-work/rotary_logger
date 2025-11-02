@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: rotary_logger.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 4:55:27 02-11-2025
+# LAST Modified: 5:11:57 02-11-2025
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -210,11 +210,29 @@ class RotaryLogger:
         merged: Optional[bool] = None,
         log_to_file: bool = True
     ) -> None:
-        """Function in charge of starting the logger in an optimised way.
+        """Start capturing stdout/stderr and configure file output.
 
-        Args:
-            default_log_folder (Path, optional): _description_. Defaults to None.
-            default_max_filesize (int, optional): _description_. Defaults to CONST.DEFAULT_LOG_MAX_FILE_SIZE.
+        This installs `TeeStream` wrappers for `sys.stdout` and
+        `sys.stderr` so output continues to appear on the terminal while
+        being mirrored to rotating files on disk.
+
+        Thread-safety and behaviour
+        - Performs light configuration snapshots under an internal lock
+          and does filesystem checks (mkdir, write-test) outside the
+          lock to avoid long-held critical sections.
+        - The actual assignment of `sys.stdout`/`sys.stderr` is done
+          while holding the internal lock to make the replacement
+          atomic relative to other control operations.
+
+        Parameters
+        - log_folder: Optional[Path] base folder to write logs. When
+          omitted, falls back to the configured defaults.
+        - max_filesize: Optional[int] override for the rotation size.
+        - merged: Optional[bool] whether to merge stdout and stderr.
+        - log_to_file: bool: whether file writes are enabled.
+
+        Returns
+        - None. After successful return, `is_logging()` should be True.
         """
         with self._file_lock:
             # Defaults (snapshot)
@@ -325,11 +343,20 @@ class RotaryLogger:
                     self._registered_flushers = []
 
     def pause_logging(self) -> bool:
-        """Toggle pause state.
+        """Toggle the logger pause state.
 
-        This function is thread-safe: internal state and global stream
-        replacements are updated while holding `_file_lock`. Flushes are
-        performed outside the lock to avoid blocking other threads.
+        When the logger is paused the `TeeStream` objects are uninstalled
+        and the original streams restored. When resumed the `TeeStream`
+        objects are reinstalled.
+
+        Returns
+        - bool: the new paused state (True when paused).
+
+        Thread-safety
+        - Updates to `self.paused` and global `sys.*` assignments are
+            performed while holding the internal lock to avoid races.
+        - Any blocking I/O (flushes) is performed after the lock is
+            released to keep critical sections short.
         """
         # Snapshot streams and current state under the lock, and perform
         # the sys.* assignment while still holding the lock to avoid races.
@@ -383,8 +410,11 @@ class RotaryLogger:
     def resume_logging(self) -> bool:
         """Explicitly resume logging (idempotent).
 
-        Updates internal state and installs the TeeStreams under the
-        lock, then flushes outside the lock.
+        This is equivalent to calling `pause_logging()` when the logger
+        is paused, but provided as a convenience. Returns the paused
+        state after resuming (False).
+
+        Thread-safety: same guarantees as `pause_logging()`.
         """
         to_flush = []
         with self._file_lock:
@@ -410,6 +440,16 @@ class RotaryLogger:
         return self.paused
 
     def is_redirected(self, stream: CONST.StdMode) -> bool:
+        """Return whether the given standard stream is redirected.
+
+        Parameters
+        - stream: one of `CONST.StdMode.STDOUT`, `STDERR` or `STDIN`.
+
+        Returns
+        - True if the corresponding stream currently has a `TeeStream` installed; False otherwise.
+
+        This is a lightweight query and safe to call concurrently.
+        """
         _stderr_stream: Optional[TeeStream] = None
         _stdout_stream: Optional[TeeStream] = None
         _stdin_stream: Optional[TeeStream] = None
@@ -418,33 +458,38 @@ class RotaryLogger:
             _stdout_stream = self.stdout_stream
             _stdin_stream = self.stdin_stream
         if stream == CONST.StdMode.STDERR:
-            if _stderr_stream:
-                return True
-            return False
+            return bool(_stderr_stream)
         if stream == CONST.StdMode.STDOUT:
-            if _stdout_stream:
-                return True
-            return False
+            return bool(_stdout_stream)
         if stream == CONST.StdMode.STDIN:
-            if _stdin_stream:
-                return True
-            return False
+            return bool(_stdin_stream)
         return False
 
     def is_logging(self) -> bool:
+        """Return True if logging is currently active (not paused).
+
+        The function checks whether any TeeStream is installed and the
+        logger is not marked as paused. Safe to call concurrently.
+        """
         with self._file_lock:
-            # Logging is active when we have at least one installed TeeStream
-            # and the logger is not paused.
             has_stream = bool(
                 self.stdout_stream or self.stderr_stream or self.stdin_stream
             )
             return has_stream and (not bool(self.paused))
 
     def stop_logging(self) -> None:
-        """Restore original streams and stop logging.
+        """Stop logging and restore original std streams.
 
-        This function updates global streams while holding the lock and
-        flushes TeeStream buffers outside the lock.
+        Behaviour
+        - Restores the original `sys.stdout`/`sys.stderr`/`sys.stdin`.
+        - Attempts to unregister any atexit flush handlers previously
+            registered by `start_logging()`.
+        - Flushes any remaining buffers after releasing the lock.
+
+        Thread-safety
+        - Stream replacement and atexit unregistration are done while
+            holding the internal lock to avoid races; flushing is
+            performed outside the lock.
         """
         to_flush = []
         with self._file_lock:
