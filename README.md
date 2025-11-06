@@ -34,6 +34,21 @@
 -->
 ![Rotary Logger logo](doxygen_generation/html/files/icon/favicon.svg)
 
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/rotary_logger)
+![PyPI - Implementation](https://img.shields.io/pypi/implementation/rotary_logger)
+![PyPI - Wheel](https://img.shields.io/pypi/wheel/rotary_logger)
+![PyPI - Version](https://img.shields.io/pypi/v/rotary_logger?label=pypi%20package:%20rotary_logger)
+![PyPI - Downloads](https://img.shields.io/pypi/dm/rotary_logger)
+![PyPI - License](https://img.shields.io/pypi/l/rotary_logger)
+![Execution status](https://github.com/Hanra-s-work/rotary_logger/actions/workflows/run_unit_tests.yaml/badge.svg)
+![GitHub Workflow Status (with event)](https://img.shields.io/github/actions/workflow/status/Hanra-s-work/rotary_logger/run_unit_tests.yaml)
+![GitHub repo size](https://img.shields.io/github/repo-size/Hanra-s-work/rotary_logger)
+![GitHub Repo stars](https://img.shields.io/github/stars/Hanra-s-work/rotary_logger)
+![GitHub commit activity (branch)](https://img.shields.io/github/commit-activity/m/Hanra-s-work/rotary_logger)
+![GitHub last commit (branch)](https://img.shields.io/github/last-commit/Hanra-s-work/rotary_logger/main)
+
+[![Static Badge](https://img.shields.io/badge/Buy_me_a_tea-Hanra-%235F7FFF?style=flat-square&logo=buymeacoffee&label=Buy%20me%20a%20coffee&labelColor=%235F7FFF&color=%23FFDD00&link=https%3A%2F%2Fwww.buymeacoffee.com%2Fhanra)](https://www.buymeacoffee.com/hanra)
+
 ## Table of contents
 
 - [Features](#features)
