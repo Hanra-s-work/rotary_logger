@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: constants.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 3:52:51 02-11-2025
+# LAST Modified: 15:49:21 03-03-2026
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -151,6 +151,30 @@ CORRECT_PREFIX: Dict[StdMode, str] = {
     StdMode.STDERR: PREFIX_STDERR,
     StdMode.STDUNKNOWN: PREFIX_STDUNKNOWN
 }
+
+PREFIX_FUNCTION_CALL_EMPTY: str = ""
+PREFIX_FUNCTION_CALL_WRITE: str = "[WRITE]"
+PREFIX_FUNCTION_CALL_WRITELINES: str = "[WRITELINES]"
+PREFIX_FUNCTION_CALL_FLUSH: str = "[FLUSH]"
+PREFIX_FUNCTION_CALL_READ: str = "[READ]"
+PREFIX_FUNCTION_CALL_READLINE: str = "[READLINE]"
+PREFIX_FUNCTION_CALL_READLINES: str = "[READLINES]"
+
+
+class PrefixFunctionCall(Enum):
+    """The prefix design for the function calls if the user wishes more precise logging
+
+    Args:
+        Enum (str): The enums with the prefix design for the function calls if the user wishes more precise logging
+    """
+    EMPTY = PREFIX_FUNCTION_CALL_EMPTY
+    WRITE = PREFIX_FUNCTION_CALL_WRITE
+    WRITELINES = PREFIX_FUNCTION_CALL_WRITELINES
+    FLUSH = PREFIX_FUNCTION_CALL_FLUSH
+    READ = PREFIX_FUNCTION_CALL_READ
+    READLINE = PREFIX_FUNCTION_CALL_READLINE
+    READLINES = PREFIX_FUNCTION_CALL_READLINES
+
 
 LOG_TO_FILE_ENV: bool = os.environ.get(
     "LOG_TO_FILE",
