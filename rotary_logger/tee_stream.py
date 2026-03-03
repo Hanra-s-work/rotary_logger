@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: tee_stream.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 14:49:6 03-03-2026
+# LAST Modified: 15:24:52 03-03-2026
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -68,16 +68,25 @@ class TeeStream:
         encoding: Optional[str] = None,
         log_to_file: bool = True
     ):
-        """Create a TeeStream.
+        """Initialise a new TeeStream.
 
-        Args:
-            root: a `Path` or `FileInstance` describing the destination.
-            original_stream: the TextIO to mirror (usually sys.stdout).
-            max_size_mb: optional maximum logfile size in MB (passed to FileInstance).
-            flush_size: optional buffer flush threshold (passed to FileInstance).
-            mode: which standard stream this wraps (StdMode).
-            error_mode: Broken-pipe handling policy (ErrorMode).
-            encoding: optional file encoding override.
+        Mirrors original_stream to disk via a FileInstance while forwarding
+        every write transparently to the caller.
+
+        Arguments:
+            root (Union[str, Path, FileInstance]): Path, string, or FileInstance describing the log destination.
+            original_stream (TextIO): The TextIO stream to mirror (usually sys.stdout).
+
+        Keyword Arguments:
+            max_size_mb (Optional[int]): Optional maximum log-file size in MB; forwarded to FileInstance. Default: None
+            flush_size (Optional[int]): Optional buffer-flush threshold in bytes; forwarded to FileInstance. Default: None
+            mode (CONST.StdMode): Which standard stream this instance wraps. Default: CONST.StdMode.STDUNKNOWN
+            error_mode (CONST.ErrorMode): Broken-pipe handling policy. Default: CONST.ErrorMode.WARN_NO_PIPE
+            encoding (Optional[str]): Optional file-encoding override; forwarded to FileInstance. Default: None
+            log_to_file (bool): Whether disk logging is enabled on construction. Default: True
+
+        Raises:
+            ValueError: If root is not a str, Path, or FileInstance.
         """
 
         self._file_lock: RLock = RLock()
@@ -106,10 +115,12 @@ class TeeStream:
     def __del__(self):
         """Best-effort cleanup on object deletion.
 
-        Attempt to flush buffered data but never raise. Note that
-        ``__del__`` may not be called at interpreter shutdown; callers
-        that need deterministic flushing should call ``flush()``
-        explicitly.
+        Attempts to flush buffered data but never raises. Note that __del__
+        may not be called at interpreter shutdown; callers that need
+        deterministic flushing should invoke flush() explicitly before
+        releasing the object. OSError and ValueError are intentionally
+        swallowed so that interpreter-shutdown teardown cannot trigger
+        unexpected tracebacks.
         """
         try:
             self.flush()
@@ -122,7 +133,14 @@ class TeeStream:
     def _get_correct_prefix(self) -> str:
         """Return the correct prefix string for the configured StdMode.
 
-        The result will already contain a trailing space when non-empty.
+        The returned string already contains a trailing space when non-empty so
+        that callers can concatenate it with the message directly. Returns an
+        empty string when logging to file is disabled, when no FileInstance is
+        set, or when the Prefix configuration has no flags enabled.
+
+        Returns:
+            The prefix string (with trailing space) matching the active StdMode,
+            or an empty string.
         """
         # ensure we have a file instance and a valid StdMode enum value
         _file_inst: Optional[FileInstance] = None
@@ -163,25 +181,32 @@ class TeeStream:
         return ""
 
     def _get_stream_if_present(self) -> TextIO:
-        """Get the io stream if it exists, otherwise, raise an attribut error.
+        """Return the underlying stream, raising if it has been cleared.
+
+        Used as a guard by every delegating method so that operations on an
+        uninitialised or already-destroyed TeeStream fail predictably rather
+        than with an obscure AttributeError.
 
         Raises:
-            self.stream_not_present (AttributeError) : The error raised when the stream is missing.
+            AttributeError: If original_stream is None.
 
         Returns:
-            TextIO: The io stream used in for forwarding the call.
+            The original TextIO stream passed at construction time.
         """
         if self.original_stream is not None:
             return self.original_stream
         raise self.stream_not_present
 
     def write(self, message: str) -> None:
-        """Write `message` to the original stream and buffer it to file.
+        """Write message to the original stream and buffer it to the log file.
 
-        This method is safe to call from multiple threads. It captures the
-        necessary references under a short lock, performs the terminal
-        write on the caller thread (with known error handling), then
-        delegates buffered file writes to `FileInstance.write()`.
+        Thread-safe: the FileInstance reference is captured under a lock before
+        any I/O is performed. The terminal write is carried out on the caller
+        thread with explicit BrokenPipeError / OSError handling; disk writes
+        are delegated to FileInstance.write().
+
+        Arguments:
+            message (str): The string to write.
         """
         _tmp_message: str = message
         _file_instance: Optional[FileInstance] = None
@@ -237,12 +262,15 @@ class TeeStream:
                 pass
 
     def writelines(self, lines: List[str]) -> None:
-        """Write `message` to the original stream and buffer it to file.
+        """Write a list of strings to the original stream and buffer them to the log file.
 
-        This method is safe to call from multiple threads. It captures the
-        necessary references under a short lock, performs the terminal
-        write on the caller thread (with known error handling), then
-        delegates buffered file writes to `FileInstance.write()`.
+        Thread-safe: behaves like write() but accepts a sequence of strings,
+        forwarding the entire sequence to the original stream via writelines()
+        and then writing each element individually to FileInstance with the
+        appropriate prefix.
+
+        Arguments:
+            lines (List[str]): The sequence of strings to write.
         """
         _tmp_message: List[str] = lines.copy()
         _file_instance: Optional[FileInstance] = None
@@ -300,10 +328,11 @@ class TeeStream:
     def flush(self) -> None:
         """Best-effort flush of terminal and buffered file output.
 
-        The call will attempt to flush both the original stream and
-        the associated `FileInstance`. Errors are swallowed to avoid
-        crashing the caller; use `FileInstance.flush()` directly for
-        stricter guarantees.
+        Attempts to flush both the original stream and the associated
+        FileInstance. All OSError and ValueError exceptions are swallowed to
+        avoid crashing the caller. For stricter guarantees call
+        FileInstance.flush() directly. This method is also called by __del__
+        during object teardown.
         """
         _file_instance: Optional[FileInstance] = None
         # Snapshot the file instance under lock
@@ -341,92 +370,287 @@ class TeeStream:
 
     @property
     def buffer(self) -> BinaryIO:
+        """Return the underlying binary buffer of the original stream.
+
+        Raises:
+            AttributeError: If the original stream is not set.
+
+        Returns:
+            The binary buffer exposed by the wrapped TextIO.
+        """
         data = self._get_stream_if_present().buffer
         return data
 
     @property
     def closed(self) -> bool:
+        """Return whether the original stream is closed.
+
+        Raises:
+            AttributeError: If the original stream is not set.
+
+        Returns:
+            True if the wrapped stream has been closed, False otherwise.
+        """
         data = self._get_stream_if_present().closed
         return data
 
     @property
     def errors(self) -> Optional[str]:
+        """Return the error-handling mode of the original stream.
+
+        Raises:
+            AttributeError: If the original stream is not set.
+
+        Returns:
+            The error-handling mode string (e.g. 'strict'), or None.
+        """
         data = self._get_stream_if_present().errors
         return data
 
     @property
     def encoding(self) -> str:
+        """Return the character encoding of the original stream.
+
+        Raises:
+            AttributeError: If the original stream is not set.
+
+        Returns:
+            The encoding string (e.g. 'utf-8').
+        """
         data = self._get_stream_if_present().encoding
         return data
 
     @property
     def line_buffering(self) -> int:
+        """Return whether line buffering is enabled on the original stream.
+
+        Raises:
+            AttributeError: If the original stream is not set.
+
+        Returns:
+            Non-zero if line buffering is active, zero otherwise.
+        """
         data = self._get_stream_if_present().line_buffering
         return data
 
     @property
     def mode(self) -> str:
+        """Return the file-mode string of the original stream.
+
+        Raises:
+            AttributeError: If the original stream is not set.
+
+        Returns:
+            The mode string (e.g. 'w', 'r').
+        """
         data = self._get_stream_if_present().mode
         return data
 
     @property
     def name(self) -> Union[str, Any]:
+        """Return the name of the original stream.
+
+        Raises:
+            AttributeError: If the original stream is not set.
+
+        Returns:
+            The stream name; typically a file path string or an integer file
+            descriptor for standard streams.
+        """
         data = self._get_stream_if_present().name
         return data
 
     @property
     def newlines(self) -> Any:
+        """Return the newline translation used by the original stream.
+
+        Raises:
+            AttributeError: If the original stream is not set.
+
+        Returns:
+            A string, tuple of strings, or None as described by the standard
+            io.TextIOBase.newlines attribute.
+        """
         data = self._get_stream_if_present().newlines
         return data
 
     def close(self) -> None:
+        """Flush pending data and close the original stream.
+
+        Calls flush() before delegating to the original stream's close()
+        method, ensuring buffered log data is written before the stream is
+        released.
+
+        Raises:
+            AttributeError: If the original stream is not set.
+        """
         self.flush()
         self._get_stream_if_present().close()
 
     def fileno(self) -> int:
+        """Return the underlying file descriptor of the original stream.
+
+        Raises:
+            AttributeError: If the original stream is not set.
+            io.UnsupportedOperation: If the stream has no file descriptor.
+
+        Returns:
+            Integer file descriptor.
+        """
         data = self._get_stream_if_present().fileno()
         return data
 
     def isatty(self) -> bool:
+        """Return whether the original stream is connected to a TTY device.
+
+        Raises:
+            AttributeError: If the original stream is not set.
+
+        Returns:
+            True if the stream is interactive (TTY), False otherwise.
+        """
         data = self._get_stream_if_present().isatty()
         return data
 
     def read(self, size: int = -1) -> str:
+        """Read and return up to size characters from the original stream.
+
+        Keyword Arguments:
+            size (int): Maximum number of characters to read; -1 reads until EOF. Default: -1
+
+        Raises:
+            AttributeError: If the original stream is not set.
+
+        Returns:
+            The characters read.
+        """
         data = self._get_stream_if_present().read(size)
         return data
 
     def readable(self) -> bool:
+        """Return whether the original stream supports reading.
+
+        Raises:
+            AttributeError: If the original stream is not set.
+
+        Returns:
+            True if the stream can be read from, False otherwise.
+        """
         data = self._get_stream_if_present().readable()
         return data
 
     def readline(self, size: int = -1) -> str:
+        """Read and return one line from the original stream.
+
+        Keyword Arguments:
+            size (int): If non-negative, at most size characters are read;
+                    -1 reads until a newline or EOF. Default: -1
+
+        Raises:
+            AttributeError: If the original stream is not set.
+
+        Returns:
+            The line read, including the trailing newline if present.
+        """
         data = self._get_stream_if_present().readline(size)
         return data
 
     def readlines(self, hint: int = -1) -> list[str]:
+        """Read and return a list of lines from the original stream.
+
+        Keyword Arguments:
+            hint (int): If non-negative, approximately hint bytes or characters are
+                    read; -1 reads until EOF. Default: -1
+
+        Raises:
+            AttributeError: If the original stream is not set.
+
+        Returns:
+            List of lines read from the stream.
+        """
         data = self._get_stream_if_present().readlines(hint)
         return data
 
     def seek(self, offset: int, whence: int = 0) -> int:
+        """Move the stream position to the given byte offset.
+
+        Arguments:
+            offset (int): Number of bytes to move the position.
+
+        Keyword Arguments:
+            whence (int): Reference point: 0 = start, 1 = current, 2 = end. Default: 0
+
+        Raises:
+            AttributeError: If the original stream is not set.
+
+        Returns:
+            The new absolute stream position.
+        """
         data = self._get_stream_if_present().seek(offset, whence)
         return data
 
     def seekable(self) -> bool:
+        """Return whether the original stream supports random-access seeking.
+
+        Raises:
+            AttributeError: If the original stream is not set.
+
+        Returns:
+            True if the stream supports seek() and tell(), False otherwise.
+        """
         data = self._get_stream_if_present().seekable()
         return data
 
     def tell(self) -> int:
+        """Return the current stream position of the original stream.
+
+        Raises:
+            AttributeError: If the original stream is not set.
+
+        Returns:
+            The current byte offset within the stream.
+        """
         data = self._get_stream_if_present().tell()
         return data
 
     def truncate(self, size: Optional[int] = None) -> int:
+        """Truncate the original stream to at most size bytes.
+
+        Keyword Arguments:
+            size (Optional[int]): Desired size in bytes; defaults to the current stream position. Default: None
+
+        Raises:
+            AttributeError: If the original stream is not set.
+
+        Returns:
+            The new file size in bytes.
+        """
         data = self._get_stream_if_present().truncate(size)
         return data
 
     def writable(self) -> bool:
+        """Return whether the original stream supports writing.
+
+        Raises:
+            AttributeError: If the original stream is not set.
+
+        Returns:
+            True if the stream can be written to, False otherwise.
+        """
         data = self._get_stream_if_present().writable()
         return data
 
     def __enter__(self) -> TextIO:
+        """Enter the runtime context for the original stream.
+
+        Delegates to the wrapped stream's __enter__() so that TeeStream can be
+        used as a context manager wherever a plain TextIO is expected.
+
+        Raises:
+            AttributeError: If the original stream is not set.
+
+        Returns:
+            The original stream as returned by its own __enter__().
+        """
         data = self._get_stream_if_present().__enter__()
         return data
