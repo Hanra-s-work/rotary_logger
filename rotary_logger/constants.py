@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: constants.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 15:49:21 03-03-2026
+# LAST Modified: 18:11:36 03-03-2026
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -62,6 +62,12 @@ STDUNKNOWN: str = "stdunknown"
 
 
 class StdMode(Enum):
+    """Enumeration of the standard stream identifiers.
+
+    Used throughout the package to distinguish which standard stream a
+    TeeStream instance is wrapping, and to look up the correct folder
+    name and log prefix for that stream.
+    """
     STDIN = STDIN
     STDOUT = STDOUT
     STDERR = STDERR
@@ -162,10 +168,11 @@ PREFIX_FUNCTION_CALL_READLINES: str = "[READLINES]"
 
 
 class PrefixFunctionCall(Enum):
-    """The prefix design for the function calls if the user wishes more precise logging
+    """Optional per-call prefix appended to log entries for precise tracing.
 
-    Args:
-        Enum (str): The enums with the prefix design for the function calls if the user wishes more precise logging
+    When enabled, each log entry is tagged with the name of the stream
+    method that produced it (e.g. [WRITE], [READLINE]), making it easy
+    to distinguish writes from reads in a shared log file.
     """
     EMPTY = PREFIX_FUNCTION_CALL_EMPTY
     WRITE = PREFIX_FUNCTION_CALL_WRITE

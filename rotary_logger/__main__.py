@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: __main__.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 7:51:1 01-11-2025
+# LAST Modified: 18:9:5 03-03-2026
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -41,7 +41,8 @@ except ImportError:
             from entrypoint import main
         except ImportError as e:
             raise RuntimeError(
-                "Failed to import 'main' from the entrypoint file.") from e
+                "Failed to import 'main' from the entrypoint file."
+            ) from e
 
 if __name__ == "__main__":
     main()

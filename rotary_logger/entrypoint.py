@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: entrypoint.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 13:54:54 01-11-2025
+# LAST Modified: 18:12:28 03-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -59,12 +59,13 @@ class Tee:
         self,
         output_error: CONST.ErrorMode = CONST.ErrorMode.WARN_NO_PIPE
     ) -> None:
-        """Create the entrypoint helper and initialise the logger.
+        """Initialise the entrypoint helper and configure the logger.
 
-        Args:
-            override: When True, log files are opened in overwrite mode.
-            ignore_interrupts: When True, SIGINT (Ctrl-C) is ignored.
-            output_error: Policy for handling broken-pipe / stdout errors.
+        Parses CLI arguments, installs the SIGINT handler when requested,
+        and creates the underlying RotaryLogger instance.
+
+        Keyword Arguments:
+            output_error (CONST.ErrorMode): Policy for handling broken-pipe or stdout errors. Default: CONST.ErrorMode.WARN_NO_PIPE
         """
         self.output_error: CONST.ErrorMode = output_error
         self.args = self._parse_args()
@@ -79,6 +80,11 @@ class Tee:
         )
 
     def _parse_args(self):
+        """Parse command-line arguments for the tee entrypoint.
+
+        Returns:
+            The populated argparse.Namespace with the parsed arguments.
+        """
         parser = argparse.ArgumentParser(
             description="Python-powered tee replacement with rotation"
         )
@@ -104,18 +110,21 @@ class Tee:
         return parser.parse_args()
 
     def _handle_interrupts_if_required(self) -> None:
-        """Ignore SIGINT (KeyboardInterrupt) when configured.
+        """Ignore SIGINT (KeyboardInterrupt) when configured to do so.
 
-        When `self.ignore_interrupts` is truthy this method installs a
-        signal handler that ignores SIGINT. This is called during
-        initialization and is a no-op when interrupts should be
-        processed normally.
+        Installs a SIG_IGN handler for SIGINT when the --ignore-interrupts
+        flag was passed on the command line. This is a no-op when interrupts
+        should be processed normally.
         """
         if self.args.ignore_interrupts:
             signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     def _pipe_check(self) -> None:
-        """Handle broken-pipe policy."""
+        """Apply the configured broken-pipe error policy.
+
+        Writes a warning to stderr or exits the process depending on the
+        value of self.output_error and whether stdout is currently a pipe.
+        """
         if self.output_error == CONST.ErrorMode.WARN:
             sys.stderr.write(CONST.BROKEN_PIPE_ERROR)
         elif self.output_error == CONST.ErrorMode.EXIT:
@@ -128,7 +137,14 @@ class Tee:
                     sys.exit(CONST.ERROR)
 
     def run(self):
-        """Main execution loop (like UNIX `tee`)."""
+        """Start logging and run the main stdin-to-stdout forwarding loop.
+
+        Behaves like UNIX tee: reads lines from stdin, prints them to
+        stdout (which is wrapped by RotaryLogger), and mirrors everything
+        to the configured log folder. Handles BrokenPipeError per the
+        configured error policy and KeyboardInterrupt when interrupts are
+        not suppressed.
+        """
         # Determine whether file logging is requested and normalise the
         # provided files argument into a single Path (or None). The
         # argparse `files` is a list (nargs='*'), so map it to a Path if
@@ -171,6 +187,7 @@ class Tee:
 
 
 def main():
+    """CLI entrypoint: create a Tee instance and run the forwarding loop."""
     Tee().run()
 
 
