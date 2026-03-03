@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: tee_stream.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 15:57:38 03-03-2026
+# LAST Modified: 17:0:39 03-03-2026
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -66,7 +66,8 @@ class TeeStream:
         mode: CONST.StdMode = CONST.StdMode.STDUNKNOWN,
         error_mode: CONST.ErrorMode = CONST.ErrorMode.WARN_NO_PIPE,
         encoding: Optional[str] = None,
-        log_to_file: bool = True
+        log_to_file: bool = True,
+        log_function_calls: bool = False
     ):
         """Initialise a new TeeStream.
 
@@ -111,6 +112,7 @@ class TeeStream:
         self.stream_not_present: AttributeError = AttributeError(
             f"{CONST.MODULE_NAME} No stream available"
         )
+        self.function_calls = log_function_calls
 
     def __del__(self):
         """Best-effort cleanup on object deletion.
@@ -168,17 +170,66 @@ class TeeStream:
             # Defensive: if FileInstance misbehaves, return no prefix
             return ""
 
+        _final_prefix: str = ""
         if not _prefix:
-            return ""
-        if _prefix.std_err and _mode == CONST.StdMode.STDERR:
-            return CONST.CORRECT_PREFIX[CONST.StdMode.STDERR] + CONST.SPACE
-        if _prefix.std_in and _mode == CONST.StdMode.STDIN:
-            return CONST.CORRECT_PREFIX[CONST.StdMode.STDIN] + CONST.SPACE
-        if _prefix.std_out and _mode == CONST.StdMode.STDOUT:
-            return CONST.CORRECT_PREFIX[CONST.StdMode.STDOUT] + CONST.SPACE
-        if _prefix.std_in or _prefix.std_err or _prefix.std_out:
-            return CONST.CORRECT_PREFIX[CONST.StdMode.STDUNKNOWN] + CONST.SPACE
-        return ""
+            _final_prefix = ""
+        elif _prefix.std_err and _mode == CONST.StdMode.STDERR:
+            _final_prefix = CONST.CORRECT_PREFIX[CONST.StdMode.STDERR]
+        elif _prefix.std_in and _mode == CONST.StdMode.STDIN:
+            _final_prefix = CONST.CORRECT_PREFIX[CONST.StdMode.STDIN]
+        elif _prefix.std_out and _mode == CONST.StdMode.STDOUT:
+            _final_prefix = CONST.CORRECT_PREFIX[CONST.StdMode.STDOUT]
+        elif _prefix.std_in or _prefix.std_err or _prefix.std_out:
+            _final_prefix = CONST.CORRECT_PREFIX[CONST.StdMode.STDUNKNOWN]
+        else:
+            _final_prefix = ""
+        if self.function_calls and function_call != CONST.PrefixFunctionCall.EMPTY:
+            _final_prefix = f"{_final_prefix}{function_call.value}"
+        if _final_prefix != "":
+            _final_prefix = f"{_final_prefix}{CONST.SPACE}"
+        return _final_prefix
+
+    def _write_to_log(self, data: Union[str, List[str]], function_call: CONST.PrefixFunctionCall) -> None:
+        """Write data to the log file if file logging is enabled.
+
+        Shared helper used by write(), writelines(), read(), readline() and
+        readlines() to avoid duplicating the snapshot-check-prefix-write
+        sequence in every method.
+
+        Arguments:
+            data (str): The string to append to the log file.
+            function_call (CONST.PrefixFunctionCall): Context passed to
+                _get_correct_prefix() to select the right prefix.
+        """
+        _file_instance: Optional[FileInstance] = None
+        with self._file_lock:
+            if self.file_instance:
+                _file_instance = self.file_instance
+        if not _file_instance:
+            return
+        try:
+            if not _file_instance.get_log_to_file():
+                return
+        except (OSError, ValueError, AttributeError):
+            return
+        try:
+            _prefix: str = self._get_correct_prefix(
+                function_call=function_call)
+        except (OSError, ValueError, AttributeError):
+            _prefix = ""
+        try:
+            if isinstance(data, list):
+                for i in data:
+                    _file_instance.write(f"{_prefix}{i}")
+            else:
+                _file_instance.write(f"{_prefix}{data}")
+        except (OSError, ValueError):
+            try:
+                sys.stderr.write(
+                    f"{CONST.MODULE_NAME} Error writing to log file\n"
+                )
+            except OSError:
+                pass
 
     def _get_stream_if_present(self) -> TextIO:
         """Return the underlying stream, raising if it has been cleared.
@@ -209,9 +260,6 @@ class TeeStream:
             message (str): The string to write.
         """
         _tmp_message: str = message
-        _file_instance: Optional[FileInstance] = None
-        with self._file_lock:
-            _file_instance = self.file_instance
 
         try:
             # Always attempt to write to the original stream
@@ -234,34 +282,7 @@ class TeeStream:
                 # swallow any errors writing to stderr during shutdown
                 pass
 
-        # If there's no file instance configured, nothing more to do
-        if not _file_instance:
-            return
-
-        # Check whether file logging is enabled on the instance
-        try:
-            if not _file_instance.get_log_to_file():
-                return
-        except (OSError, ValueError, AttributeError):
-            # Defensive: don't allow file-side errors to break stdout/stderr
-            return
-
-        # Compute prefix and write to file; protect against file-side errors
-        try:
-            _prefix: str = self._get_correct_prefix(
-                function_call=CONST.PrefixFunctionCall.WRITE
-            )
-        except (OSError, ValueError, AttributeError):
-            _prefix = ""
-
-        try:
-            _file_instance.write(f"{_prefix}{_tmp_message}")
-        except (OSError, ValueError):
-            try:
-                sys.stderr.write(
-                    f"{CONST.MODULE_NAME} Error writing to log file\n")
-            except OSError:
-                pass
+        self._write_to_log(_tmp_message, CONST.PrefixFunctionCall.WRITE)
 
     def writelines(self, lines: List[str]) -> None:
         """Write a list of strings to the original stream and buffer them to the log file.
@@ -275,9 +296,6 @@ class TeeStream:
             lines (List[str]): The sequence of strings to write.
         """
         _tmp_message: List[str] = lines.copy()
-        _file_instance: Optional[FileInstance] = None
-        with self._file_lock:
-            _file_instance = self.file_instance
         try:
             # Always attempt to write to the original stream
             self.original_stream.writelines(_tmp_message)
@@ -298,36 +316,7 @@ class TeeStream:
             except OSError:
                 # swallow any errors writing to stderr during shutdown
                 pass
-        # If there's no file instance configured, nothing more to do
-        if not _file_instance:
-            return
-
-        # Check whether file logging is enabled on the instance
-        try:
-            if not _file_instance.get_log_to_file():
-                return
-        except (OSError, ValueError, AttributeError):
-            # Defensive: don't allow file-side errors to break stdout/stderr
-            return
-
-        # Compute prefix and write to file; protect against file-side errors
-        try:
-            _prefix: str = self._get_correct_prefix(
-                function_call=CONST.PrefixFunctionCall.WRITELINES
-            )
-        except (OSError, ValueError, AttributeError):
-            _prefix = ""
-
-        try:
-            for i in _tmp_message:
-                _file_instance.write(f"{_prefix}{i}")
-        except (OSError, ValueError):
-            try:
-                sys.stderr.write(
-                    f"{CONST.MODULE_NAME} Error writing to log file\n"
-                )
-            except OSError:
-                pass
+        self._write_to_log(_tmp_message, CONST.PrefixFunctionCall.WRITELINES)
 
     def read(self, size: int = -1) -> str:
         """Read and return up to size characters from the original stream.
@@ -344,49 +333,14 @@ class TeeStream:
 
         # Always attempt to read from the original stream first so that we don't lose data if the stream is interactive and the file instance is misconfigured
         data = self._get_stream_if_present().read(size)
-        _file_instance: Optional[FileInstance] = None
-        # Snapshot the file instance under lock
-        with self._file_lock:
-            if self.file_instance:
-                _file_instance = self.file_instance
-        # If there's no file instance configured, nothing more to do
-        if not _file_instance:
-            return data
-
-        # Check whether file logging is enabled on the instance
-        try:
-            if not _file_instance.get_log_to_file():
-                return data
-        except (OSError, ValueError, AttributeError):
-            # Defensive: don't allow file-side errors to break stdout/stderr
-            return data
-
-        # Compute prefix and write to file; protect against file-side errors
-        try:
-            _prefix: str = self._get_correct_prefix(
-                function_call=CONST.PrefixFunctionCall.READ
-            )
-        except (OSError, ValueError, AttributeError):
-            _prefix = ""
-
-        try:
-            _file_instance.write(f"{_prefix}{data}")
-        except (OSError, ValueError):
-            try:
-                sys.stderr.write(
-                    f"{CONST.MODULE_NAME} Error writing to log file\n"
-                )
-            except OSError:
-                pass
-
+        self._write_to_log(data, CONST.PrefixFunctionCall.READ)
         return data
 
     def readline(self, size: int = -1) -> str:
         """Read and return one line from the original stream.
 
         Keyword Arguments:
-            size (int): If non-negative, at most size characters are read;
-                    -1 reads until a newline or EOF. Default: -1
+            size (int): If non-negative, at most size characters are read; -1 reads until a newline or EOF. Default: -1
 
         Raises:
             AttributeError: If the original stream is not set.
@@ -395,49 +349,14 @@ class TeeStream:
             The line read, including the trailing newline if present.
         """
         data = self._get_stream_if_present().readline(size)
-        _file_instance: Optional[FileInstance] = None
-        # Snapshot the file instance under lock
-        with self._file_lock:
-            if self.file_instance:
-                _file_instance = self.file_instance
-        # If there's no file instance configured, nothing more to do
-        if not _file_instance:
-            return data
-
-        # Check whether file logging is enabled on the instance
-        try:
-            if not _file_instance.get_log_to_file():
-                return data
-        except (OSError, ValueError, AttributeError):
-            # Defensive: don't allow file-side errors to break stdout/stderr
-            return data
-
-        # Compute prefix and write to file; protect against file-side errors
-        try:
-            _prefix: str = self._get_correct_prefix(
-                function_call=CONST.PrefixFunctionCall.READLINE
-            )
-        except (OSError, ValueError, AttributeError):
-            _prefix = ""
-
-        try:
-            _file_instance.write(f"{_prefix}{data}")
-        except (OSError, ValueError):
-            try:
-                sys.stderr.write(
-                    f"{CONST.MODULE_NAME} Error writing to log file\n"
-                )
-            except OSError:
-                pass
-
+        self._write_to_log(data, CONST.PrefixFunctionCall.READLINE)
         return data
 
     def readlines(self, hint: int = -1) -> list[str]:
         """Read and return a list of lines from the original stream.
 
         Keyword Arguments:
-            hint (int): If non-negative, approximately hint bytes or characters are
-                    read; -1 reads until EOF. Default: -1
+            hint (int): If non-negative, approximately hint bytes or characters are read; -1 reads until EOF. Default: -1
 
         Raises:
             AttributeError: If the original stream is not set.
@@ -446,41 +365,7 @@ class TeeStream:
             List of lines read from the stream.
         """
         data = self._get_stream_if_present().readlines(hint)
-        _file_instance: Optional[FileInstance] = None
-        # Snapshot the file instance under lock
-        with self._file_lock:
-            if self.file_instance:
-                _file_instance = self.file_instance
-        # If there's no file instance configured, nothing more to do
-        if not _file_instance:
-            return data
-
-        # Check whether file logging is enabled on the instance
-        try:
-            if not _file_instance.get_log_to_file():
-                return data
-        except (OSError, ValueError, AttributeError):
-            # Defensive: don't allow file-side errors to break stdout/stderr
-            return data
-
-        # Compute prefix and write to file; protect against file-side errors
-        try:
-            _prefix: str = self._get_correct_prefix(
-                function_call=CONST.PrefixFunctionCall.READLINES
-            )
-        except (OSError, ValueError, AttributeError):
-            _prefix = ""
-
-        try:
-            _file_instance.write(f"{_prefix}{data}")
-        except (OSError, ValueError):
-            try:
-                sys.stderr.write(
-                    f"{CONST.MODULE_NAME} Error writing to log file\n"
-                )
-            except OSError:
-                pass
-
+        self._write_to_log(data, CONST.PrefixFunctionCall.READLINES)
         return data
 
     def flush(self) -> None:
@@ -511,13 +396,6 @@ class TeeStream:
             if self.file_instance:
                 _file_instance = self.file_instance
 
-        try:
-            _prefix: str = self._get_correct_prefix(
-                function_call=CONST.PrefixFunctionCall.FLUSH
-            )
-        except (OSError, ValueError, AttributeError):
-            _prefix = ""
-
         if _file_instance:
             try:
                 if not _file_instance.get_log_to_file():
@@ -527,8 +405,14 @@ class TeeStream:
                 pass
 
             try:
-
-                _file_instance.write(_prefix)
+                if self.function_calls:
+                    try:
+                        _prefix: str = self._get_correct_prefix(
+                            function_call=CONST.PrefixFunctionCall.FLUSH
+                        )
+                    except (OSError, ValueError, AttributeError):
+                        _prefix: str = ""
+                    _file_instance.write(_prefix)
                 _file_instance.flush()
             except (OSError, ValueError):
                 # don't let file flush failures propagate from a best-effort flush
@@ -774,4 +658,25 @@ class TeeStream:
             The original stream as returned by its own __enter__().
         """
         data = self._get_stream_if_present().__enter__()
+        return data
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> Optional[bool]:
+        """Exit the runtime context and delegate to the original stream.
+
+        Delegates to the wrapped stream's __exit__() so that TeeStream can be
+        used as a context manager wherever a plain TextIO is expected.
+
+        Arguments:
+            exc_type (type): The exception type, or None if no exception.
+            exc_val (BaseException): The exception instance, or None.
+            exc_tb (traceback): The traceback, or None.
+
+        Raises:
+            AttributeError: If the original stream is not set.
+
+        Returns:
+            The return value of the original stream's __exit__(); True suppresses
+            the exception, False or None propagates it.
+        """
+        data = self._get_stream_if_present().__exit__(exc_type, exc_val, exc_tb)
         return data
