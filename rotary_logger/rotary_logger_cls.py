@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: rotary_logger.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 5:11:57 02-11-2025
+# LAST Modified: 18:2:19 03-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -73,11 +73,26 @@ class RotaryLogger:
         prefix_in_stream: bool = True,
         prefix_out_stream: bool = True,
         prefix_err_stream: bool = True,
+        log_function_calls_stdin: bool = False,
+        log_function_calls_stdout: bool = False,
+        log_function_calls_stderr: bool = False
     ) -> None:
-        """Create a RotaryLogger using the provided defaults.
+        """Initialise a new RotaryLogger.
 
-        The constructor does not start logging; call `start_logging()` to
-        install the `TeeStream` wrappers and begin mirroring output.
+        Does not start logging; call start_logging() to install TeeStream
+        wrappers and begin mirroring output.
+
+        Keyword Arguments:
+            log_to_file (bool): Whether file logging is enabled. Default: CONST.LOG_TO_FILE_ENV
+            override (bool): Whether existing log files may be overwritten. Default: False
+            raw_log_folder (str): Raw path string for the log folder. Default: CONST.RAW_LOG_FOLDER_ENV
+            default_log_folder (Path): Fallback log folder path. Default: CONST.DEFAULT_LOG_FOLDER
+            default_max_filesize (int): Maximum log file size in MB before rotation. Default: CONST.DEFAULT_LOG_MAX_FILE_SIZE
+            merge_streams (bool): Whether stdout and stderr share a single log file. Default: True
+            encoding (str): File encoding for log files. Default: CONST.DEFAULT_ENCODING
+            prefix_in_stream (bool): Whether stdin entries are prefixed. Default: True
+            prefix_out_stream (bool): Whether stdout entries are prefixed. Default: True
+            prefix_err_stream (bool): Whether stderr entries are prefixed. Default: True
         """
         self._file_lock: RLock = RLock()
         self.log_to_file: bool = log_to_file
@@ -95,6 +110,10 @@ class RotaryLogger:
         self.file_data.set_merged(merge_streams)
         self.file_data.set_prefix(self.prefix)
         self.file_data.set_override(override)
+        # Log the std function calls configuration
+        self.log_function_calls_stdin = log_function_calls_stdin
+        self.log_function_calls_stdout = log_function_calls_stdout
+        self.log_function_calls_stderr = log_function_calls_stderr
         # Stream instance tracking
         self.stdout_stream: Optional[TeeStream] = None
         self.stderr_stream: Optional[TeeStream] = None
@@ -106,25 +125,35 @@ class RotaryLogger:
         self._registered_flushers: List[Callable] = []
 
     def __del__(self) -> None:
+        """Best-effort cleanup on object deletion.
+
+        Calls stop_logging() to restore original streams. Errors are not
+        raised since __del__ may run during interpreter shutdown.
+        """
         self.stop_logging()
 
     def __call__(self, *args: Any, **kwds: Any) -> None:
-        """Convenience: allow the instance to be called to start logging.
+        """Allow the instance to be called as a function to start logging.
 
-        Calling the instance is equivalent to calling `start_logging()`
-        and is provided for compact initialization patterns.
+        Calling the instance is equivalent to calling start_logging() and
+        is provided for compact initialisation patterns.
+
+        Arguments:
+            *args (Any): Ignored positional arguments.
+            **kwds (Any): Ignored keyword arguments.
         """
         with self._file_lock:
             self.start_logging()
 
     def _get_user_max_file_size(self) -> int:
-        """Function in charge of checking that the provided filesize is a number and only a number.
+        """Return the maximum log file size from the environment or the current default.
 
-        Args:
-            default_log_max_file_size (int, optional): The default filesize if the user input is incorrect. Defaults to CONST.DEFAULT_LOG_MAX_FILE_SIZE.
+        Reads the LOG_MAX_SIZE environment variable and coerces it to an
+        integer. Falls back to the value stored in file_data if the variable
+        is absent or non-numeric.
 
         Returns:
-            int: The final size.
+            The resolved maximum log file size in MB.
         """
         default_max_log_size: int = self.file_data.get_max_size()
         try:
@@ -133,16 +162,20 @@ class RotaryLogger:
             return default_max_log_size
 
     def _verify_user_log_path(self, raw_log_folder: Path = CONST.DEFAULT_LOG_FOLDER) -> Path:
-        """Make sure that the path provided by the user is valid and within bounds.
+        """Validate, resolve and ensure writability of the requested log folder.
 
-        Args:
-            raw_log_folder (Path, optional): The path provided by the user. Defaults to CONST.DEFAULT_LOG_FOLDER.
+        Resolves relative paths against the package directory, appends the
+        standard base-folder name when missing, and performs a write-test.
+        Falls back to the default log folder on any validation failure.
+
+        Keyword Arguments:
+            raw_log_folder (Path): Candidate log folder path. Default: CONST.DEFAULT_LOG_FOLDER
 
         Raises:
-            ValueError: If the provided paths are wrong.
+            RuntimeError: If both the requested path and the default fallback are not writable.
 
         Returns:
-            Path: The checked path.
+            The validated, writable, resolved log folder path.
         """
         # Snapshot inputs and minimal state under lock, then perform
         # filesystem operations outside the lock to avoid blocking other
@@ -194,8 +227,14 @@ class RotaryLogger:
     def _resolve_log_folder(self, log_folder: Optional[Path]) -> Path:
         """Resolve and verify the final log folder to use.
 
-        This centralises the logic of falling back to defaults and keeps
-        start_logging concise.
+        Centralises the logic of falling back to the configured default and
+        delegates validation to _verify_user_log_path().
+
+        Arguments:
+            log_folder (Optional[Path]): Requested log folder, or None to use the default.
+
+        Returns:
+            The validated, writable, resolved log folder path.
         """
         with self._file_lock:
             if log_folder is None:
@@ -210,29 +249,20 @@ class RotaryLogger:
         merged: Optional[bool] = None,
         log_to_file: bool = True
     ) -> None:
-        """Start capturing stdout/stderr and configure file output.
+        """Start capturing stdout and stderr and configure file output.
 
-        This installs `TeeStream` wrappers for `sys.stdout` and
-        `sys.stderr` so output continues to appear on the terminal while
-        being mirrored to rotating files on disk.
+        Installs TeeStream wrappers for sys.stdout and sys.stderr so output
+        continues to appear on the terminal while being mirrored to rotating
+        files on disk. Configuration snapshots are taken under the internal
+        lock; filesystem operations (mkdir, write-test) are performed outside
+        it to keep critical sections short. The sys.* assignments are made
+        while holding the lock to keep the replacement atomic.
 
-        Thread-safety and behaviour
-        - Performs light configuration snapshots under an internal lock
-          and does filesystem checks (mkdir, write-test) outside the
-          lock to avoid long-held critical sections.
-        - The actual assignment of `sys.stdout`/`sys.stderr` is done
-          while holding the internal lock to make the replacement
-          atomic relative to other control operations.
-
-        Parameters
-        - log_folder: Optional[Path] base folder to write logs. When
-          omitted, falls back to the configured defaults.
-        - max_filesize: Optional[int] override for the rotation size.
-        - merged: Optional[bool] whether to merge stdout and stderr.
-        - log_to_file: bool: whether file writes are enabled.
-
-        Returns
-        - None. After successful return, `is_logging()` should be True.
+        Keyword Arguments:
+            log_folder (Optional[Path]): Base folder to write logs; falls back to configured defaults. Default: None
+            max_filesize (Optional[int]): Override for the rotation size in MB. Default: None
+            merged (Optional[bool]): Whether to merge stdout and stderr into one file. Default: None
+            log_to_file (bool): Whether file writes are enabled. Default: True
         """
         with self._file_lock:
             # Defaults (snapshot)
@@ -312,13 +342,15 @@ class RotaryLogger:
             stdout_inst,
             sys.stdout,
             mode=CONST.StdMode.STDOUT,
-            log_to_file=log_to_file
+            log_to_file=log_to_file,
+            log_function_calls=self.log_function_calls_stdout
         )
         _stderr_stream = TeeStream(
             stderr_inst,
             sys.stderr,
             mode=CONST.StdMode.STDERR,
-            log_to_file=log_to_file
+            log_to_file=log_to_file,
+            log_function_calls=self.log_function_calls_stderr
         )
 
         with self._file_lock:
@@ -345,18 +377,14 @@ class RotaryLogger:
     def pause_logging(self) -> bool:
         """Toggle the logger pause state.
 
-        When the logger is paused the `TeeStream` objects are uninstalled
-        and the original streams restored. When resumed the `TeeStream`
-        objects are reinstalled.
+        When the logger is paused the TeeStream objects are uninstalled and
+        the original streams restored. When called again the TeeStream objects
+        are reinstalled. sys.* assignments are performed while holding the
+        internal lock; flushing is done afterwards to keep critical sections
+        short.
 
-        Returns
-        - bool: the new paused state (True when paused).
-
-        Thread-safety
-        - Updates to `self.paused` and global `sys.*` assignments are
-            performed while holding the internal lock to avoid races.
-        - Any blocking I/O (flushes) is performed after the lock is
-            released to keep critical sections short.
+        Returns:
+            The new paused state (True when now paused, False when now resumed).
         """
         # Snapshot streams and current state under the lock, and perform
         # the sys.* assignment while still holding the lock to avoid races.
@@ -410,11 +438,12 @@ class RotaryLogger:
     def resume_logging(self) -> bool:
         """Explicitly resume logging (idempotent).
 
-        This is equivalent to calling `pause_logging()` when the logger
-        is paused, but provided as a convenience. Returns the paused
-        state after resuming (False).
+        Equivalent to calling pause_logging() while paused, but provided as
+        a convenience. sys.* assignments are made under the internal lock;
+        flushing is done afterwards.
 
-        Thread-safety: same guarantees as `pause_logging()`.
+        Returns:
+            The paused state after resuming, which is always False.
         """
         to_flush = []
         with self._file_lock:
@@ -440,15 +469,15 @@ class RotaryLogger:
         return self.paused
 
     def is_redirected(self, stream: CONST.StdMode) -> bool:
-        """Return whether the given standard stream is redirected.
+        """Return whether the given standard stream is currently redirected.
 
-        Parameters
-        - stream: one of `CONST.StdMode.STDOUT`, `STDERR` or `STDIN`.
+        Lightweight query; safe to call concurrently.
 
-        Returns
-        - True if the corresponding stream currently has a `TeeStream` installed; False otherwise.
+        Arguments:
+            stream (CONST.StdMode): One of CONST.StdMode.STDOUT, STDERR, or STDIN.
 
-        This is a lightweight query and safe to call concurrently.
+        Returns:
+            True if the corresponding stream has a TeeStream installed, False otherwise.
         """
         _stderr_stream: Optional[TeeStream] = None
         _stdout_stream: Optional[TeeStream] = None
@@ -468,28 +497,26 @@ class RotaryLogger:
     def is_logging(self) -> bool:
         """Return True if logging is currently active (not paused).
 
-        The function checks whether any TeeStream is installed and the
-        logger is not marked as paused. Safe to call concurrently.
+        Checks whether any TeeStream is installed and the logger is not
+        marked as paused. Safe to call concurrently.
+
+        Returns:
+            True if at least one TeeStream is installed and the logger is not paused.
         """
         with self._file_lock:
             has_stream = bool(
                 self.stdout_stream or self.stderr_stream or self.stdin_stream
             )
-            return has_stream and (not bool(self.paused))
+        return has_stream and (not bool(self.paused))
 
     def stop_logging(self) -> None:
-        """Stop logging and restore original std streams.
+        """Stop logging and restore the original standard streams.
 
-        Behaviour
-        - Restores the original `sys.stdout`/`sys.stderr`/`sys.stdin`.
-        - Attempts to unregister any atexit flush handlers previously
-            registered by `start_logging()`.
-        - Flushes any remaining buffers after releasing the lock.
-
-        Thread-safety
-        - Stream replacement and atexit unregistration are done while
-            holding the internal lock to avoid races; flushing is
-            performed outside the lock.
+        Restores sys.stdout, sys.stderr, and sys.stdin to their original
+        values, attempts to unregister any atexit flush handlers registered
+        by start_logging(), and flushes remaining buffers. Stream replacement
+        and atexit unregistration are done under the internal lock; flushing
+        is performed afterwards.
         """
         to_flush = []
         with self._file_lock:
