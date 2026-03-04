@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: rotary_logger.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 2:13:0 04-03-2026
+# LAST Modified: 3:24:45 04-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -86,13 +86,15 @@ class RotaryLogger:
         Does not start logging; call start_logging() to install TeeStream
         wrappers and begin mirroring output.
 
-        Keyword Arguments:
+        Arguments:
             log_to_file (bool): Whether file logging is enabled. Default: CONST.LOG_TO_FILE_ENV
             override (bool): Whether existing log files may be overwritten. Default: False
             raw_log_folder (str): Raw path string for the log folder. Default: CONST.RAW_LOG_FOLDER_ENV
             default_log_folder (Path): Fallback log folder path. Default: CONST.DEFAULT_LOG_FOLDER
             default_max_filesize (int): Maximum log file size in MB before rotation. Default: CONST.DEFAULT_LOG_MAX_FILE_SIZE
             merge_streams (bool): Whether stdout and stderr share a single log file. Default: True
+
+        Keyword Arguments:
             encoding (str): File encoding for log files. Default: CONST.DEFAULT_ENCODING
             merge_stdin (bool): Whether stdin is merged into the shared log file. Default: False
             capture_stdin (bool): Whether stdin is wrapped with a TeeStream. Default: False
@@ -166,12 +168,12 @@ class RotaryLogger:
     def _get_user_max_file_size(self) -> int:
         """Return the maximum log file size from the environment or the current default.
 
-        Reads the LOG_MAX_SIZE environment variable and coerces it to an
-        integer. Falls back to the value stored in file_data if the variable
+        Reads the `LOG_MAX_SIZE` environment variable and coerces it to an
+        integer. Falls back to the value stored in `file_data` if the variable
         is absent or non-numeric.
 
         Returns:
-            The resolved maximum log file size in MB.
+            The resolved maximum log file size in bytes (as stored by `FileInstance`).
         """
         default_max_log_size: int = self.file_data.get_max_size()
         try:
@@ -260,8 +262,19 @@ class RotaryLogger:
             return self._verify_user_log_path(log_folder)
 
     def _handle_stream_assignments(self, log_folder: Path) -> None:
-        """
-        Placeholder for stream assignment logic factored out of start_logging.
+        """Create `FileInstance` objects and store them in `self._file_stream_instances`.
+
+        Reads the current configuration snapshot from `self.file_data` (outside the
+        lock) and constructs either a single shared `FileInstance` (when `merged` is True)
+        or three separate per-stream instances for stdin, stdout, and stderr.
+
+        When merged, stdout and stderr share the same descriptor. stdin is also merged
+        into that file when `merge_stdin` is True; otherwise its own unmerged instance
+        is created. Merged/unmerged state is recorded in
+        `self._file_stream_instances.merged_streams`.
+
+        Arguments:
+            log_folder (Path): The validated, writable root folder for log files.
         """
         with self._file_lock:
             _override = self.file_data.get_override()
@@ -381,6 +394,8 @@ class RotaryLogger:
 
             if max_filesize is not None:
                 self.file_data.set_max_size(max_filesize)
+            # Apply user-provided max size
+            self.file_data.set_max_size(self._get_user_max_file_size())
 
             # snapshot file_data-derived configuration to avoid nested locks
             if merged is not None:
@@ -389,11 +404,8 @@ class RotaryLogger:
                 self.file_data.set_merge_stdin(merge_stdin)
 
         # Determine final log folder using the built-in verification (outside lock)
-        _log_folder = self._verify_user_log_path(_raw_folder)
+        _log_folder: Path = self._verify_user_log_path(_raw_folder)
         _log_folder.mkdir(parents=True, exist_ok=True)
-
-        # Apply user-provided max size
-        self.file_data.set_max_size(self._get_user_max_file_size())
 
         # Create the file descriptor instances based on the current configuration (outside lock)
         self._handle_stream_assignments(_log_folder)
@@ -459,56 +471,70 @@ class RotaryLogger:
                     # Clear the list to avoid false expectations.
                     self._registered_flushers = []
 
-    def pause_logging(self) -> bool:
-        """Toggle the logger pause state.
+    def _resume_logging_locked(self, to_flush: List[TeeStream]) -> None:
+        """Restore TeeStream wrappers on sys.stdin/stdout/stderr.
 
-        When the logger is paused the TeeStream objects are uninstalled and
-        the original streams restored. When called again the TeeStream objects
-        are reinstalled. sys.* assignments are performed while holding the
-        internal lock; flushing is done afterwards to keep critical sections
-        short.
+        Must be called while `self._file_lock` is already held. Sets
+        `self.paused` to False and reassigns `sys.stdout`, `sys.stderr`,
+        and `sys.stdin` to their respective TeeStream instances. Each
+        stream that is reinstalled is appended to `to_flush` so the
+        caller can flush them after releasing the lock.
 
-        Returns:
-            The new paused state (True when now paused, False when now resumed).
+        Arguments:
+            to_flush (List[TeeStream]): Accumulator list; streams to flush after the lock is released.
         """
-        # Snapshot streams and current state under the lock, and perform
-        # the sys.* assignment while still holding the lock to avoid races.
-        to_flush = []
-        with self._file_lock:
-            current = self.paused
-            out = self.stdout_stream
-            err = self.stderr_stream
-            inn = self.stdin_stream
-            if current:
-                # currently paused -> resume logging
-                self.paused = False
-                if out:
-                    sys.stdout = out
-                if err:
-                    sys.stderr = err
-                if inn:
-                    sys.stdin = inn
-                # after resuming, we want to flush the streams to ensure
-                # no buffered data is left behind
-                if out:
-                    to_flush.append(out)
-                if err:
-                    to_flush.append(err)
-                if inn:
-                    to_flush.append(inn)
-            else:
-                # currently running -> pause logging
-                self.paused = True
-                if out:
-                    sys.stdout = out.original_stream
-                    to_flush.append(out)
-                if err:
-                    sys.stderr = err.original_stream
-                    to_flush.append(err)
-                if inn:
-                    sys.stdin = inn.original_stream
-                    to_flush.append(inn)
+        self.paused = False
+        out = self.stdout_stream
+        err = self.stderr_stream
+        inn = self.stdin_stream
+        # currently pause -> resume logging
+        if out is not None:
+            sys.stdout = out
+            to_flush.append(out)
+        if err is not None:
+            sys.stderr = err
+            to_flush.append(err)
+        if inn is not None:
+            sys.stdin = inn
+            to_flush.append(inn)
 
+    def _pause_logging_locked(self, to_flush: List[TeeStream]) -> None:
+        """Replace TeeStream wrappers with the original standard streams.
+
+        Must be called while `self._file_lock` is already held. Sets
+        `self.paused` to True and reassigns `sys.stdout`, `sys.stderr`,
+        and `sys.stdin` back to their original (pre-TeeStream) counterparts.
+        Each stream that is uninstalled is appended to `to_flush` so the
+        caller can flush buffered data after releasing the lock.
+
+        Arguments:
+            to_flush (List[TeeStream]): Accumulator list; streams to flush after the lock is released.
+        """
+        self.paused = True
+        out = self.stdout_stream
+        err = self.stderr_stream
+        inn = self.stdin_stream
+        # currently running -> pause logging
+        if out is not None:
+            sys.stdout = out.original_stream
+            to_flush.append(out)
+        if err is not None:
+            sys.stderr = err.original_stream
+            to_flush.append(err)
+        if inn is not None:
+            sys.stdin = inn.original_stream
+            to_flush.append(inn)
+
+    def _flush_streams(self, to_flush: List[TeeStream]) -> None:
+        """Flush a list of TeeStream instances, suppressing expected I/O errors.
+
+        Iterates over `to_flush` and calls `flush()` on each stream. `OSError`
+        and `ValueError` (e.g. broken pipe, closed file descriptor) are caught
+        and silently ignored; all other exceptions propagate.
+
+        Arguments:
+            to_flush (List[TeeStream]): Streams to flush.
+        """
         # Perform flushes outside the lock (may do I/O)
         for s in to_flush:
             try:
@@ -518,40 +544,55 @@ class RotaryLogger:
                 # may be raised during flush. Catch those specifically.
                 pass
 
-        return self.paused
+    def pause_logging(self, *, toggle: bool = True) -> bool:
+        """Toggle the logger pause state.
 
-    def resume_logging(self) -> bool:
+        When the logger is paused the TeeStream objects are uninstalled and
+        the original streams restored. When called again the TeeStream objects
+        are reinstalled. sys.* assignments are performed while holding the
+        internal lock; flushing is done afterwards to keep critical sections
+        short.
+
+        Keyword Arguments:
+            toggle (bool): When True and the logger is currently running, pause it; when True and already paused, resume it. When False, always pause. Default: True
+
+        Returns:
+            The new paused state (True when now paused, False when now resumed).
+        """
+        # Snapshot streams and current state under the lock, and perform
+        # the sys.* assignment while still holding the lock to avoid races.
+        to_flush = []
+        with self._file_lock:
+            if toggle is True and self.paused is False:
+                self._resume_logging_locked(to_flush)
+            else:
+                self._pause_logging_locked(to_flush)
+            _paused = self.paused
+        self._flush_streams(to_flush)
+        return _paused
+
+    def resume_logging(self, *, toggle: bool = False) -> bool:
         """Explicitly resume logging (idempotent).
 
         Equivalent to calling pause_logging() while paused, but provided as
         a convenience. sys.* assignments are made under the internal lock;
         flushing is done afterwards.
 
+        Keyword Arguments:
+            toggle (bool): When True and the logger is not paused, pause it instead of resuming. When False, always resume. Default: False
+
         Returns:
-            The paused state after resuming, which is always False.
+            The paused state after the call (False when logging was resumed, True when toggled into pause).
         """
         to_flush = []
         with self._file_lock:
-            self.paused = False
-            out = self.stdout_stream
-            err = self.stderr_stream
-            inn = self.stdin_stream
-            if out:
-                sys.stdout = out
-                to_flush.append(out)
-            if err:
-                sys.stderr = err
-                to_flush.append(err)
-            if inn:
-                sys.stdin = inn
-                to_flush.append(inn)
-
-        for s in to_flush:
-            try:
-                s.flush()
-            except (OSError, ValueError):
-                pass
-        return self.paused
+            if toggle is True and self.paused is False:
+                self._pause_logging_locked(to_flush)
+            else:
+                self._resume_logging_locked(to_flush)
+            _paused = self.paused
+        self._flush_streams(to_flush)
+        return _paused
 
     def is_redirected(self, stream: CONST.StdMode) -> bool:
         """Return whether the given standard stream is currently redirected.
