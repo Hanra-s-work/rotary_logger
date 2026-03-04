@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: test_integration_writes.py
 # CREATION DATE: 01-11-2025
-# LAST Modified: 13:47:22 01-11-2025
+# LAST Modified: 3:41:50 04-03-2026
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -51,7 +51,6 @@ def _find_log_by_folder(root: Path, folder_name: Optional[str]) -> Path:
     # perform a shallow recursive search for .log files
     for p in logs_root.rglob("*.log"):
         parent = p.parent
-# LAST Modified: 13:38:57 01-11-2025
         # prefer files whose parent is not one of the STD subfolders
         if parent.name not in (CONST.FOLDER_STDOUT, CONST.FOLDER_STDERR, CONST.FOLDER_STDIN, CONST.FOLDER_STDUNKNOWN):
             return p
@@ -125,3 +124,34 @@ def test_start_logging_merged_writes(tmp_path: Path) -> None:
     contents = merged_file.read_text(encoding="utf-8")
     assert "OUT: hello merged" in contents
     assert "ERR: goodbye merged" in contents
+
+
+def test_merge_stdin_shares_same_file_as_stdout(tmp_path: Path) -> None:
+    """With merge_stdin=True and merged=True, stdin uses the same FileInstance as stdout/stderr."""
+    rl = RotaryLogger(merge_stdin=True)
+    rl.start_logging(log_folder=tmp_path, merged=True,
+                     merge_stdin=True, log_to_file=False)
+    try:
+        assert rl.stdin_stream is not None
+        assert rl.stdout_stream is not None
+        # All three streams share the same underlying FileInstance
+        assert rl.stdin_stream.file_instance is rl.stdout_stream.file_instance
+        assert rl.stderr_stream is not None
+        assert rl.stderr_stream.file_instance is rl.stdout_stream.file_instance
+    finally:
+        rl.stop_logging()
+
+
+def test_split_mode_stdin_has_own_instance(tmp_path: Path) -> None:
+    """In split mode (merged=False), stdin gets its own FileInstance separate from stdout."""
+    rl = RotaryLogger()
+    rl.start_logging(log_folder=tmp_path, merged=False, log_to_file=False)
+    try:
+        assert rl.stdin_stream is not None
+        assert rl.stdout_stream is not None
+        # Split mode: each stream uses a different FileInstance
+        assert rl.stdin_stream.file_instance is not rl.stdout_stream.file_instance
+        assert rl.stderr_stream is not None
+        assert rl.stderr_stream.file_instance is not rl.stdout_stream.file_instance
+    finally:
+        rl.stop_logging()

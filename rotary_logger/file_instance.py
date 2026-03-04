@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: file_instance.py
 # CREATION DATE: 30-10-2025
-# LAST Modified: 1:39:15 04-03-2026
+# LAST Modified: 3:44:19 04-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -622,6 +622,7 @@ class FileInstance:
         self.set_flush_size(file_data.get_flush_size(), lock=False)
         self.set_folder_prefix(file_data.get_folder_prefix(), lock=False)
         self.set_log_to_file(file_data.get_log_to_file(), lock=False)
+        self.set_merge_stdin(file_data.get_merge_stdin(), lock=False)
 
     def _copy(self) -> "FileInstance":
         """Return a shallow copy of this FileInstance configuration.
@@ -641,6 +642,7 @@ class FileInstance:
         tmp.set_max_size(self.get_max_size(), lock=False)
         tmp.set_folder_prefix(self.get_folder_prefix(), lock=False)
         tmp.set_log_to_file(self.get_log_to_file(), lock=False)
+        tmp.set_merge_stdin(self.get_merge_stdin(), lock=False)
         return tmp
 
     def _get_current_date(self) -> datetime:

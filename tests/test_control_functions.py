@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: test_control_functions.py
 # CREATION DATE: 02-11-2025
-# LAST Modified: 4:55:13 02-11-2025
+# LAST Modified: 3:41:37 04-03-2026
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -57,7 +57,7 @@ def test_start_stop_registers_and_unregisters_atexit(tmp_path: Path):
         assert hasattr(rl, "_registered_flushers")
         assert len(rl._registered_flushers) >= 1
 
-# LAST Modified: 4:53:54 02-11-2025riginal stdout and unregister atexit handlers
+    # stop_logging should restore original stdout and unregister atexit handlers
     rl.stop_logging()
     assert sys.stdout is orig_out
     assert getattr(rl, "_atexit_registered", False) is False
@@ -120,3 +120,77 @@ def test_concurrent_pause_resume_stress(tmp_path: Path):
     # Ensure no exceptions and logger remains in a valid state
     assert isinstance(rl.is_logging(), bool)
     rl.stop_logging()
+
+
+def test_pause_logging_toggle_false_always_pauses(tmp_path: Path):
+    """pause_logging(toggle=False) should always pause, even if already paused."""
+    rl = RotaryLogger()
+    rl.start_logging(log_folder=tmp_path, merged=False)
+    assert rl.is_logging()
+
+    # First call: running → pause
+    result = rl.pause_logging(toggle=False)
+    assert result is True
+
+    # Second call: already paused → still pause (idempotent)
+    result = rl.pause_logging(toggle=False)
+    assert result is True
+
+    rl.stop_logging()
+
+
+def test_resume_logging_toggle_true_pauses_when_active(tmp_path: Path):
+    """resume_logging(toggle=True) should pause when the logger is currently running."""
+    rl = RotaryLogger()
+    rl.start_logging(log_folder=tmp_path, merged=False)
+    assert rl.is_logging()
+
+    # toggle=True when active → should pause
+    result = rl.resume_logging(toggle=True)
+    assert result is True
+    assert not rl.is_logging()
+
+    rl.stop_logging()
+
+
+def test_is_redirected_reflects_logging_state(tmp_path: Path):
+    """is_redirected() should return False before and after stop_logging, True during."""
+    from rotary_logger import constants as CONST
+
+    rl = RotaryLogger()
+    assert rl.is_redirected(CONST.StdMode.STDOUT) is False
+    assert rl.is_redirected(CONST.StdMode.STDERR) is False
+
+    rl.start_logging(log_folder=tmp_path, merged=False)
+    assert rl.is_redirected(CONST.StdMode.STDOUT) is True
+    assert rl.is_redirected(CONST.StdMode.STDERR) is True
+
+    rl.stop_logging()
+    assert rl.is_redirected(CONST.StdMode.STDOUT) is False
+    assert rl.is_redirected(CONST.StdMode.STDERR) is False
+
+
+def test_rotary_logger_callable_starts_logging(tmp_path: Path):
+    """Calling the RotaryLogger instance like a function should start logging."""
+    rl = RotaryLogger(default_log_folder=tmp_path)
+    orig_out = sys.stdout
+    try:
+        rl()  # __call__ delegates to start_logging() with no args
+        assert rl.is_logging()
+    finally:
+        rl.stop_logging()
+        # Guard: ensure stdout is restored even on unexpected failure
+        if sys.stdout is not orig_out and not hasattr(sys.stdout, 'original_stream'):
+            sys.stdout = orig_out
+
+
+def test_stop_logging_clears_stdin_stream(tmp_path: Path):
+    """stop_logging should restore sys.stdin and clear stdin_stream."""
+    orig_in = sys.stdin
+    rl = RotaryLogger()
+    rl.start_logging(log_folder=tmp_path, merged=True)
+    assert rl.stdin_stream is not None
+
+    rl.stop_logging()
+    assert rl.stdin_stream is None
+    assert sys.stdin is orig_in

@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: rotary_logger.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 3:24:45 04-03-2026
+# LAST Modified: 3:35:35 04-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -563,7 +563,7 @@ class RotaryLogger:
         # the sys.* assignment while still holding the lock to avoid races.
         to_flush = []
         with self._file_lock:
-            if toggle is True and self.paused is False:
+            if toggle is True and self.paused is True:
                 self._resume_logging_locked(to_flush)
             else:
                 self._pause_logging_locked(to_flush)

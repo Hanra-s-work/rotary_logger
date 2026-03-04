@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: test_rotary_integration.py
 # CREATION DATE: 01-11-2025
-# LAST Modified: 4:31:57 01-11-2025
+# LAST Modified: 3:44:19 04-03-2026
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -86,3 +86,53 @@ def test_destructor_safe_on_closed_files(tmp_path: Path) -> None:
     # deleting ts should not raise; collect to trigger __del__
     del ts
     gc.collect()
+
+
+def test_log_to_file_false_writes_no_content(tmp_path: Path) -> None:
+    """With log_to_file=False, no content should be written to any log file."""
+    SENTINEL = "SENTINEL_MUST_NOT_APPEAR_IN_LOG_XYZ"
+    rl = RotaryLogger()
+    orig_out = sys.stdout
+    orig_err = sys.stderr
+    try:
+        rl.start_logging(log_folder=tmp_path, merged=True, log_to_file=False)
+        sys.stdout.write(f"{SENTINEL}\n")
+        try:
+            sys.stdout.flush()
+        except Exception:
+            pass
+    finally:
+        sys.stdout = orig_out
+        sys.stderr = orig_err
+
+    for log_file in tmp_path.rglob("*.log"):
+        content = log_file.read_text(encoding="utf-8", errors="ignore")
+        assert SENTINEL not in content, (
+            f"Sentinel unexpectedly logged to {log_file} when log_to_file=False"
+        )
+
+
+def test_stdout_prefix_appears_in_log(tmp_path: Path) -> None:
+    """When prefix_out_stream=True the [STDOUT] prefix should appear in the log."""
+    from rotary_logger import constants as CONST
+
+    rl = RotaryLogger(prefix_out_stream=True)
+    orig_out = sys.stdout
+    orig_err = sys.stderr
+    try:
+        rl.start_logging(log_folder=tmp_path, merged=True, log_to_file=True)
+        sys.stdout.write("prefixed line\n")
+        try:
+            sys.stdout.flush()
+        except Exception:
+            pass
+    finally:
+        sys.stdout = orig_out
+        sys.stderr = orig_err
+
+    log_files = list(tmp_path.rglob("*.log"))
+    assert log_files, "No log file was created"
+    content = log_files[0].read_text(encoding="utf-8")
+    assert CONST.PREFIX_STDOUT in content, (
+        f"Expected {CONST.PREFIX_STDOUT!r} in log, got: {content!r}"
+    )

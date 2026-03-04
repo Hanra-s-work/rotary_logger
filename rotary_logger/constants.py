@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: constants.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 1:57:45 04-03-2026
+# LAST Modified: 3:34:22 04-03-2026
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -36,7 +36,7 @@ import os
 import sys
 from enum import Enum
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import IO, Optional, Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -210,9 +210,9 @@ class FileStreamInstances:
     stderr: Optional["FileInstance"] = None
     stdin: Optional["FileInstance"] = None
     stdunknown: Optional["FileInstance"] = None
-    merged_streams: Dict[StdMode, bool] = {
+    merged_streams: Dict[StdMode, bool] = field(default_factory=lambda: {
         StdMode.STDIN: False,
         StdMode.STDOUT: False,
         StdMode.STDERR: False,
         StdMode.STDUNKNOWN: False
-    }
+    })
