@@ -22,7 +22,7 @@
 -- PROJECT: rotary_logger
 -- FILE: tee_stream.md
 -- CREATION DATE: 01-11-2025
--- LAST Modified: 2:34:12 01-11-2025
+-- LAST Modified: 4:5:44 04-03-2026
 -- DESCRIPTION: 
 -- A module that provides a universal python light on iops way of logging to files your program execution.
 -- /STOP
@@ -35,44 +35,101 @@
 
 ## Purpose
 
-- TeeStream mirrors a TextIO stream (usually `sys.stdout` or `sys.stderr`) to disk via a `FileInstance` while also preserving normal terminal output.
+`TeeStream` mirrors a `TextIO` stream (`sys.stdout`, `sys.stderr`, or `sys.stdin`) to disk via a `FileInstance` while preserving normal terminal output. It is a drop-in replacement for the standard streams: the rest of application code simply calls `print()`, `sys.stdout.write()`, etc. without knowing the stream was replaced.
 
-## Primary class
+## Constructor
 
-- TeeStream(root, original_stream, *, max_size_mb=None, flush_size=None, mode=StdMode.STDUNKNOWN, error_mode=ErrorMode.WARN_NO_PIPE, encoding=None)
-  - root: a `pathlib.Path` or a `FileInstance` describing the destination.
-  - original_stream: the stream to mirror (e.g. `sys.stdout`).
-  - mode: which standard stream this instance represents (StdMode).
-  - error_mode: controls behavior on broken pipe (warn / exit variants).
+```py
+TeeStream(
+    root,                                   # Union[str, Path, FileInstance]
+    original_stream,                        # TextIO
+    *,
+    max_size_mb=None,                       # Optional[int]
+    flush_size=None,                        # Optional[int]
+    mode=CONST.StdMode.STDUNKNOWN,          # CONST.StdMode
+    error_mode=CONST.ErrorMode.WARN_NO_PIPE, # CONST.ErrorMode
+    encoding=None,                          # Optional[str]
+    log_to_file=True,                       # bool
+    log_function_calls=False,               # bool
+)
+```
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `root` | `Union[str, Path, FileInstance]` | Log destination: path string, `Path`, or a pre-built `FileInstance` | — |
+| `original_stream` | `TextIO` | The stream to mirror (e.g. `sys.stdout`) | — |
+| `max_size_mb` | `Optional[int]` | Max log-file size in MB; forwarded to `FileInstance` | `None` |
+| `flush_size` | `Optional[int]` | Buffer-flush threshold in bytes; forwarded to `FileInstance` | `None` |
+| `mode` | `CONST.StdMode` | Which standard stream this instance wraps | `STDUNKNOWN` |
+| `error_mode` | `CONST.ErrorMode` | Broken-pipe handling policy | `WARN_NO_PIPE` |
+| `encoding` | `Optional[str]` | Encoding override; forwarded to `FileInstance` | `None` |
+| `log_to_file` | `bool` | Whether disk logging is enabled on construction | `True` |
+| `log_function_calls` | `bool` | Prefix each log entry with the method name (`[WRITE]`, `[READLINE]`, …) | `False` |
+
+Raises `ValueError` if `root` is not a `str`, `Path`, or `FileInstance`.
+
+## Public methods
+
+### Write path
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `write` | `write(message: str)` | Write `message` to the terminal and buffer it for disk |
+| `writelines` | `writelines(lines: List[str])` | Call `write()` for each line |
+| `flush` | `flush()` | Flush the terminal stream and trigger a `FileInstance` flush |
+
+### Read path (stdin wrapping)
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `read` | `read(size=-1) → str` | Read from the original stream; optionally log the result |
+| `readline` | `readline(size=-1) → str` | Read one line from the original stream |
+| `readlines` | `readlines(hint=-1) → list[str]` | Read all lines from the original stream |
+
+### Capability probes (TextIO compatibility)
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `readable()` | `bool` | `True` when `mode` is `STDIN` |
+| `writable()` | `bool` | `True` when `mode` is not `STDIN` |
+| `seekable()` | `bool` | Always `False` |
 
 ## Behavior and guarantees
 
-- The class captures a few references under a tiny `RLock` to avoid races and then performs I/O without holding that lock long-term.
-- Writes to the original stream are performed on the caller thread. They are wrapped in specific exception handlers (BrokenPipeError, OSError) and will not raise unexpected exceptions back to caller code.
-- File writes are buffered via `FileInstance.write()`; those buffered writes are cheap (append to an in-memory buffer). Rotation and flush I/O is handled inside `FileInstance`.
+- **No background threads**: all I/O runs on the caller's thread. Terminal writes are wrapped in specific exception handlers (`BrokenPipeError`, `OSError`) and will never raise unexpected exceptions back into the application.
+- **Disk writes are cheap**: buffering is delegated to `FileInstance`. Each `write()` call appends to an in-memory list; actual disk I/O and rotation happen in `FileInstance._flush_buffer()`.
+- **Broken-pipe semantics** are controlled by `error_mode`:
+  - `WARN` / `WARN_NO_PIPE`: print a warning to the real `sys.stderr`.
+  - `EXIT` / `EXIT_NO_PIPE`: call `sys.exit()` on the caller thread.
 
-## Threading and resource constraints
+## Threading and resource notes
 
-- No background threads are spawned by default; the design intentionally avoids creating threads so the middleware doesn't increase process thread usage.
-- Because terminal writes run on the caller thread, a slow or blocked `original_stream` can delay the caller; this is an unavoidable I/O risk unless a dedicated worker thread or external buffering is accepted.
-
-## Error / fatal semantics
-
-- When `error_mode` requests exit, `TeeStream` will call `sys.exit()` on the caller thread for BrokenPipeError (this follows the user's requirement that fatal errors be handled "on our terms").
-- Non-fatal I/O errors are reported to `sys.stderr` where possible; `TeeStream` avoids broad `except Exception` catches and only handles known exception types.
+- A tiny `RLock` guards reference reads; disk I/O is performed outside the lock.
+- Because terminal writes block the caller, a slow or blocked `original_stream` can delay the calling thread — an unavoidable trade-off without a dedicated I/O worker.
+- For high-throughput services, consider tuning `flush_size` in `FileInstance` to amortise syscall overhead.
 
 ## Usage example
 
 ```py
+import sys
+import pathlib
 from rotary_logger.tee_stream import TeeStream
 from rotary_logger.file_instance import FileInstance
+from rotary_logger import constants as CONST
 
 fi = FileInstance(pathlib.Path("/var/log/myapp"))
-tee = TeeStream(fi, sys.stdout, mode=CONST.StdMode.STDOUT)
-tee.write("hello\n")
+tee = TeeStream(
+    fi,
+    sys.stdout,
+    mode=CONST.StdMode.STDOUT,
+    log_function_calls=True,
+)
+sys.stdout = tee
+print("hello")  # → terminal + /var/log/myapp/…/stdout/….log
 ```
 
 ## Operator notes
 
-- The module exposes `flush()` which attempts a best-effort flush; callers that require deterministic shutdown should call `FileInstance.flush()` and an explicit `close()` if/when provided.
-- For high-throughput services, consider bounded buffering at `FileInstance` level to avoid unbounded memory growth during slow disk I/O.
+- `flush()` is best-effort; for deterministic shutdown call `FileInstance.flush()` directly.
+- The `log_function_calls` flag adds a `PrefixFunctionCall` tag (`[WRITE]`, `[READLINE]`, …) to each log entry, making it easy to distinguish write origins in mixed-stream log files.
+- `TeeStream` does not close or restore the `original_stream`; that is the responsibility of `RotaryLogger.stop_logging()`.
