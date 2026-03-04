@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: rotary_logger.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 2:6:10 04-03-2026
+# LAST Modified: 2:9:30 04-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -572,11 +572,11 @@ class RotaryLogger:
             _stdout_stream = self.stdout_stream
             _stdin_stream = self.stdin_stream
         if stream == CONST.StdMode.STDERR:
-            return bool(_stderr_stream)
+            return _stderr_stream is not None
         if stream == CONST.StdMode.STDOUT:
-            return bool(_stdout_stream)
+            return _stdout_stream is not None
         if stream == CONST.StdMode.STDIN:
-            return bool(_stdin_stream)
+            return _stdin_stream is not None
         return False
 
     def is_logging(self) -> bool:
