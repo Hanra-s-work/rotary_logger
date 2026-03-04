@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: constants.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 18:11:36 03-03-2026
+# LAST Modified: 1:57:45 04-03-2026
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -37,7 +37,10 @@ import sys
 from enum import Enum
 from pathlib import Path
 from dataclasses import dataclass
-from typing import IO, Optional, Dict, Any
+from typing import IO, Optional, Dict, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .rotary_logger_cls import FileInstance
 
 IS_A_TTY: bool = sys.stdout.isatty()
 IS_PIPE: bool = not IS_A_TTY
@@ -192,3 +195,24 @@ RAW_LOG_FOLDER_ENV: str = os.environ.get(
     "LOG_FOLDER_NAME",
     str(DEFAULT_LOG_FOLDER)
 )
+
+
+@dataclass
+class FileStreamInstances:
+    """Container for the FileInstance objects corresponding to each stream.
+
+    Attributes:
+        stdout: the FileInstance for stdout, or None if not capturing.
+        stderr: the FileInstance for stderr, or None if not capturing.
+        stdin: the FileInstance for stdin, or None if not capturing.
+    """
+    stdout: Optional["FileInstance"] = None
+    stderr: Optional["FileInstance"] = None
+    stdin: Optional["FileInstance"] = None
+    stdunknown: Optional["FileInstance"] = None
+    merged_streams: Dict[StdMode, bool] = {
+        StdMode.STDIN: False,
+        StdMode.STDOUT: False,
+        StdMode.STDERR: False,
+        StdMode.STDUNKNOWN: False
+    }

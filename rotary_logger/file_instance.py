@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: file_instance.py
 # CREATION DATE: 30-10-2025
-# LAST Modified: 13:56:1 01-11-2025
+# LAST Modified: 1:39:15 04-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -65,19 +65,24 @@ class FileInstance:
         max_size_mb: Optional[int] = None,
         flush_size_kb: Optional[int] = None,
         folder_prefix: Optional[CONST.StdMode] = None,
-        log_to_file: bool = True
+        log_to_file: bool = True,
+        merge_stdin: Optional[bool] = None,
     ) -> None:
         """Create a FileInstance wrapper.
 
-        Args:
-            file_path: initial file path, Path or FileInfo, or None to defer.
-            override: when True open files for write ('w') instead of append ('a').
-            merged: whether multiple streams should share the same file.
-            encoding: text encoding to use for file I/O.
-            prefix: optional Prefix to use when teeing.
-            max_size_mb: optional maximum logfile size in MB.
-            flush_size_kb: optional buffer flush size in KB.
-            folder_prefix: optional StdMode to segregate per-stream folders.
+        Arguments:
+            file_path (Optional[Union[str, Path, CONST.FileInfo]]): Initial file path, Path or FileInfo, or None to defer opening.
+
+        Keyword Arguments:
+            override (Optional[bool]): When True open files for write ('w') instead of append ('a'). Default: None
+            merged (Optional[bool]): Whether multiple streams should share the same file. Default: None
+            encoding (Optional[str]): Text encoding to use for file I/O. Default: None
+            prefix (Optional[CONST.Prefix]): Optional Prefix configuration to use when teeing. Default: None
+            max_size_mb (Optional[int]): Maximum logfile size in MB before rotation. Default: None
+            flush_size_kb (Optional[int]): Buffer flush threshold in KB. Default: None
+            folder_prefix (Optional[CONST.StdMode]): StdMode used to segregate per-stream subfolders. Default: None
+            log_to_file (bool): Whether file logging is enabled. Default: True
+            merge_stdin (Optional[bool]): Whether stdin is merged into the shared log file. Default: None
         """
 
         # per-instance mutable defaults (avoid sharing across instances)
@@ -87,6 +92,7 @@ class FileInstance:
         self.file: Optional[CONST.FileInfo] = None
         self.override: bool = False
         self.merged: bool = True
+        self.merge_stdin: bool = False
         self.encoding: str = CONST.DEFAULT_ENCODING
         self.prefix: Optional[CONST.Prefix] = None
         self.max_size: int = CONST.DEFAULT_LOG_MAX_FILE_SIZE
@@ -94,21 +100,23 @@ class FileInstance:
         self.folder_prefix: Optional[CONST.StdMode] = None
 
         self._buffer: List[str] = []
-        if override:
+        if override is not None:
             self.set_override(override)
-        if merged:
+        if merged is not None:
             self.set_merged(merged)
-        if encoding:
+        if merge_stdin is not None:
+            self.set_merge_stdin(merge_stdin)
+        if encoding is not None:
             self.set_encoding(encoding)
-        if prefix:
+        if prefix is not None:
             self.set_prefix(prefix)
-        if max_size_mb:
+        if max_size_mb is not None:
             self._set_max_size(max_size_mb)
-        if flush_size_kb:
+        if flush_size_kb is not None:
             self._set_flush_size(flush_size_kb)
-        if folder_prefix:
+        if folder_prefix is not None:
             self.set_folder_prefix(folder_prefix)
-        if file_path:
+        if file_path is not None:
             self.set_filepath(file_path)
 
     def __del__(self) -> None:
@@ -130,15 +138,16 @@ class FileInstance:
         self.file = None
 
     def set_log_to_file(self, log_to_file: bool, *, lock: bool = True) -> None:
-        """Public wrapper to set the maximum logfile size.
+        """Enable or disable file logging.
 
-        Args:
-            max_size_mb: maximum size in megabytes (or an absolute byte
-                value). The value will be normalised by
-                `_set_max_size` and stored in `self.max_size` as
-                bytes.
-            lock: when True the instance lock is acquired while
-                updating the configuration.
+        When `log_to_file` is False no data will be written to disk even
+        if a file descriptor is open.
+
+        Arguments:
+            log_to_file (bool): Whether writes to the log file are enabled.
+
+        Keyword Arguments:
+            lock (bool): When True the instance lock is acquired while updating the flag. Default: True
         """
         if lock:
             with self._file_lock:
@@ -149,13 +158,14 @@ class FileInstance:
     def set_max_size(self, max_size_mb: int, *, lock: bool = True) -> None:
         """Public wrapper to set the maximum logfile size.
 
-        Args:
-            max_size_mb: maximum size in megabytes (or an absolute byte
-                value). The value will be normalised by
-                `_set_max_size` and stored in `self.max_size` as
-                bytes.
-            lock: when True the instance lock is acquired while
-                updating the configuration.
+        Delegates to `_set_max_size` which normalises the value to bytes
+        and applies range checks.
+
+        Arguments:
+            max_size_mb (int): Maximum size in megabytes. The value is normalised by `_set_max_size` and stored in `self.max_size` as bytes.
+
+        Keyword Arguments:
+            lock (bool): When True the instance lock is acquired while updating the configuration. Default: True
         """
         if lock:
             with self._file_lock:
@@ -203,12 +213,33 @@ class FileInstance:
                 return
         self.merged = bool(merged)
 
+    def set_merge_stdin(self, merge_stdin: bool, *, lock: bool = True) -> None:
+        """Enable or disable stdin merging into the shared log file.
+
+        When `merge_stdin` is True stdin data is written to the same file
+        as stdout/stderr; when False stdin is kept separate or not logged.
+        The `lock` parameter controls whether the instance lock is acquired.
+
+        Arguments:
+            merge_stdin (bool): Whether stdin should be merged into the shared log file.
+
+        Keyword Arguments:
+            lock (bool): When True the instance lock is acquired while updating the flag. Default: True
+        """
+        if lock:
+            with self._file_lock:
+                self.merge_stdin = bool(merge_stdin)
+                return
+        self.merge_stdin = bool(merge_stdin)
+
     def set_encoding(self, encoding: str, *, lock: bool = True) -> None:
         """Set the text encoding used for file I/O.
 
-        Args:
-            encoding: a codec name such as 'utf-8'. When `lock` is True
-                the change is performed while holding the lock.
+        Arguments:
+            encoding (str): A codec name such as 'utf-8'.
+
+        Keyword Arguments:
+            lock (bool): When True the change is performed while holding the instance lock. Default: True
         """
         if lock:
             with self._file_lock:
@@ -250,11 +281,11 @@ class FileInstance:
     def set_filepath(self, file_path: Optional[Union[str, Path, CONST.FileInfo]], *, lock: bool = True) -> None:
         """Set or clear the active file/file path for this instance.
 
-        Args:
-            file_path: a path-like object, a `CONST.FileInfo` instance
-                describing an already-open file, or None to clear the
-                current file. When `lock` is True the instance lock is
-                held while the change is applied.
+        Arguments:
+            file_path (Optional[Union[str, Path, CONST.FileInfo]]): A path-like object, a `CONST.FileInfo` instance describing an already-open file, or None to clear the current file.
+
+        Keyword Arguments:
+            lock (bool): When True the instance lock is held while the change is applied. Default: True
         """
         if not file_path:
             if lock:
@@ -272,6 +303,14 @@ class FileInstance:
         self._set_filepath_child(file_path)
 
     def get_log_to_file(self, *, lock: bool = True) -> bool:
+        """Return True when file logging is enabled.
+
+        Keyword Arguments:
+            lock (bool): When True the instance lock is acquired before reading the flag. Default: True
+
+        Returns:
+            True if writes to the log file are enabled, False otherwise.
+        """
         if lock:
             with self._file_lock:
                 return self._log_to_file
@@ -298,6 +337,20 @@ class FileInstance:
             with self._file_lock:
                 return self.merged
         return self.merged
+
+    def get_merge_stdin(self, *, lock: bool = True) -> bool:
+        """Return the merge_stdin flag (True when stdin is merged into the shared log file).
+
+        Keyword Arguments:
+            lock (bool): When True the instance lock is held while reading the value. Default: True
+
+        Returns:
+            True if stdin is merged into the shared log file, False otherwise.
+        """
+        if lock:
+            with self._file_lock:
+                return self.merge_stdin
+        return self.merge_stdin
 
     def get_encoding(self, *, lock: bool = True) -> str:
         """Return the configured text encoding for file writes.
@@ -607,10 +660,10 @@ class FileInstance:
         return self._get_current_date().strftime(f"{CONST.FILE_LOG_DATE_FORMAT}.log")
 
     def _should_flush(self) -> bool:
-        """Function in charge of checking if the buffer size has been hit and thus needs to be cleared.
+        """Check whether the in-memory buffer has reached the flush threshold.
 
         Returns:
-            bool: True if hit, False otherwise
+            True if the total encoded size of buffered lines meets or exceeds `flush_size`, False otherwise.
         """
         _tmp: int = 0
         for line in self._buffer:
@@ -635,10 +688,10 @@ class FileInstance:
         self._buffer.clear()
 
     def _should_rotate(self) -> bool:
-        """Function in charge of checking if the buffer size has been hit and thus needs to be cleared.
+        """Check whether the current log file has exceeded the maximum size threshold.
 
         Returns:
-            bool: True if hit, False otherwise
+            True if the file's `written_bytes` exceeds `max_size` or no file is open, False otherwise.
         """
         if self.file:
             return self.file.written_bytes > self.max_size
@@ -657,10 +710,17 @@ class FileInstance:
             self.file = self._open_file(log_path)
 
     def _create_log_path(self, base_override: Optional[Path] = None) -> Path:
-        """Function in charge of creating the log path on disk.
+        """Build the timestamped log file path and create the parent directories.
+
+        The path is organised as `<root>/logs/<year>/<month>/<day>/[<stream>/]<timestamp>.log`.
+        If `base_override` is provided it is used as the root; otherwise the instance's
+        current file path or the package directory is used as the fallback.
+
+        Keyword Arguments:
+            base_override (Optional[Path]): Override root directory for the log path. Default: None
 
         Returns:
-            Path: The log_path
+            The resolved Path for the new log file.
         """
         # If a base_override is provided (for example when opening from
         # `_open_file` with a user-supplied directory), prefer it. Otherwise
@@ -707,6 +767,19 @@ class FileInstance:
         return day_dir / filename
 
     def _looks_like_directory(self, dir_path: Path) -> bool:
+        """Heuristic check to decide whether a path refers to a directory.
+
+        Returns True when the path has no file extension, already exists as a
+        directory, or ends with a path separator. Used to determine whether a
+        caller-supplied path should be treated as a folder (triggering
+        automatic log-file naming) or as an explicit file path.
+
+        Arguments:
+            dir_path (Path): Path to evaluate.
+
+        Returns:
+            True if the path appears to represent a directory, False otherwise.
+        """
         if not str(dir_path):
             return False
         if dir_path.suffix == "":
@@ -720,7 +793,18 @@ class FileInstance:
         return str_path.endswith(os.sep) or str_path.endswith("/") or str_path.endswith("\\")
 
     def _open_file(self, file_path: Path) -> CONST.FileInfo:
-        """Function in charge of opening a file instance so that the program can write to it.
+        """Open or create the log file at `file_path` and return a populated `FileInfo`.
+
+        If `file_path` looks like a directory (as determined by `_looks_like_directory`)
+        a timestamped filename is generated via `_create_log_path`. The parent directory
+        is created if it does not exist. The file descriptor is opened outside the
+        instance lock; the resulting `FileInfo` is populated atomically under the lock.
+
+        Arguments:
+            file_path (Path): Destination path for the log file, or a directory.
+
+        Returns:
+            A `CONST.FileInfo` with `path`, `descriptor`, and `written_bytes` populated.
         """
         _node: CONST.FileInfo = CONST.FileInfo()
         _node.path = Path(file_path)

@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: rotary_logger.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 18:2:19 03-03-2026
+# LAST Modified: 2:6:10 04-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -70,12 +70,16 @@ class RotaryLogger:
         merge_streams: bool = True,
         *,
         encoding: str = CONST.DEFAULT_ENCODING,
+        merge_stdin: bool = False,
+        capture_stdin: bool = False,
+        capture_stdout: bool = True,
+        capture_stderr: bool = True,
         prefix_in_stream: bool = True,
         prefix_out_stream: bool = True,
         prefix_err_stream: bool = True,
         log_function_calls_stdin: bool = False,
         log_function_calls_stdout: bool = False,
-        log_function_calls_stderr: bool = False
+        log_function_calls_stderr: bool = False,
     ) -> None:
         """Initialise a new RotaryLogger.
 
@@ -90,9 +94,16 @@ class RotaryLogger:
             default_max_filesize (int): Maximum log file size in MB before rotation. Default: CONST.DEFAULT_LOG_MAX_FILE_SIZE
             merge_streams (bool): Whether stdout and stderr share a single log file. Default: True
             encoding (str): File encoding for log files. Default: CONST.DEFAULT_ENCODING
+            merge_stdin (bool): Whether stdin is merged into the shared log file. Default: False
+            capture_stdin (bool): Whether stdin is wrapped with a TeeStream. Default: False
+            capture_stdout (bool): Whether stdout is wrapped with a TeeStream. Default: True
+            capture_stderr (bool): Whether stderr is wrapped with a TeeStream. Default: True
             prefix_in_stream (bool): Whether stdin entries are prefixed. Default: True
             prefix_out_stream (bool): Whether stdout entries are prefixed. Default: True
             prefix_err_stream (bool): Whether stderr entries are prefixed. Default: True
+            log_function_calls_stdin (bool): Whether TeeStream function calls on stdin are logged. Default: False
+            log_function_calls_stdout (bool): Whether TeeStream function calls on stdout are logged. Default: False
+            log_function_calls_stderr (bool): Whether TeeStream function calls on stderr are logged. Default: False
         """
         self._file_lock: RLock = RLock()
         self.log_to_file: bool = log_to_file
@@ -110,10 +121,17 @@ class RotaryLogger:
         self.file_data.set_merged(merge_streams)
         self.file_data.set_prefix(self.prefix)
         self.file_data.set_override(override)
+        self.file_data.set_merge_stdin(merge_stdin)
+        # Toggles to specify whether to capture a stream or not; used by start_logging to determine which streams to wrap.
+        self.capture_stdin: bool = capture_stdin
+        self.capture_stdout: bool = capture_stdout
+        self.capture_stderr: bool = capture_stderr
         # Log the std function calls configuration
         self.log_function_calls_stdin = log_function_calls_stdin
         self.log_function_calls_stdout = log_function_calls_stdout
         self.log_function_calls_stderr = log_function_calls_stderr
+        # File stream instances are created in start_logging and assigned to these attributes for later reference and cleanup.
+        self._file_stream_instances: CONST.FileStreamInstances = CONST.FileStreamInstances()
         # Stream instance tracking
         self.stdout_stream: Optional[TeeStream] = None
         self.stderr_stream: Optional[TeeStream] = None
@@ -241,13 +259,98 @@ class RotaryLogger:
                 log_folder = self.default_log_folder
             return self._verify_user_log_path(log_folder)
 
+    def _handle_stream_assignments(self, log_folder: Path) -> None:
+        """
+        Placeholder for stream assignment logic factored out of start_logging.
+        """
+        with self._file_lock:
+            _override = self.file_data.get_override()
+            _encoding = self.file_data.get_encoding()
+            _prefix = self.file_data.get_prefix()
+            _max_size_mb = self.file_data.get_max_size()
+            _flush_size_kb = self.file_data.get_flush_size()
+            _merged_flag = self.file_data.get_merged()
+            _merge_stdin_flag = self.file_data.get_merge_stdin()
+
+        if _merged_flag:
+            mixed_inst: FileInstance = FileInstance(
+                file_path=log_folder,
+                override=_override,
+                merged=True,
+                encoding=_encoding,
+                prefix=_prefix,
+                max_size_mb=_max_size_mb,
+                flush_size_kb=_flush_size_kb,
+                folder_prefix=None,
+                merge_stdin=_merge_stdin_flag
+            )
+
+            self._file_stream_instances.stdout = mixed_inst
+            self._file_stream_instances.stderr = mixed_inst
+            self._file_stream_instances.merged_streams[CONST.StdMode.STDOUT] = True
+            self._file_stream_instances.merged_streams[CONST.StdMode.STDERR] = True
+            if _merge_stdin_flag:
+                self._file_stream_instances.stdin = mixed_inst
+                self._file_stream_instances.merged_streams[CONST.StdMode.STDIN] = True
+            else:
+                self._file_stream_instances.stdin = FileInstance(
+                    file_path=log_folder,
+                    override=_override,
+                    merged=False,
+                    encoding=_encoding,
+                    prefix=_prefix,
+                    max_size_mb=_max_size_mb,
+                    flush_size_kb=_flush_size_kb,
+                    folder_prefix=CONST.StdMode.STDIN,
+                    merge_stdin=False
+                )
+        else:
+            self._file_stream_instances.stdin = FileInstance(
+                file_path=log_folder,
+                override=_override,
+                merged=False,
+                encoding=_encoding,
+                prefix=_prefix,
+                max_size_mb=_max_size_mb,
+                flush_size_kb=_flush_size_kb,
+                folder_prefix=CONST.StdMode.STDIN,
+                merge_stdin=False
+            )
+            self._file_stream_instances.stdout = FileInstance(
+                file_path=log_folder,
+                override=_override,
+                merged=False,
+                encoding=_encoding,
+                prefix=_prefix,
+                max_size_mb=_max_size_mb,
+                flush_size_kb=_flush_size_kb,
+                folder_prefix=CONST.StdMode.STDOUT,
+                merge_stdin=_merge_stdin_flag
+            )
+            self._file_stream_instances.stderr = FileInstance(
+                file_path=log_folder,
+                override=_override,
+                merged=False,
+                encoding=_encoding,
+                prefix=_prefix,
+                max_size_mb=_max_size_mb,
+                flush_size_kb=_flush_size_kb,
+                folder_prefix=CONST.StdMode.STDERR,
+                merge_stdin=_merge_stdin_flag
+            )
+
+            self._file_stream_instances.merged_streams[CONST.StdMode.STDOUT] = False
+            self._file_stream_instances.merged_streams[CONST.StdMode.STDERR] = False
+            self._file_stream_instances.merged_streams[CONST.StdMode.STDIN] = False
+
     def start_logging(
         self,
         *,
         log_folder: Optional[Path] = None,
         max_filesize: Optional[int] = None,
         merged: Optional[bool] = None,
-        log_to_file: bool = True
+        log_to_file: bool = True,
+        merge_stdin: Optional[bool] = None
     ) -> None:
         """Start capturing stdout and stderr and configure file output.
 
@@ -263,7 +366,9 @@ class RotaryLogger:
             max_filesize (Optional[int]): Override for the rotation size in MB. Default: None
             merged (Optional[bool]): Whether to merge stdout and stderr into one file. Default: None
             log_to_file (bool): Whether file writes are enabled. Default: True
+            merge_stdin (Optional[bool]): Whether to merge stdin into the shared log file. Default: None
         """
+        # Prepare FileInstance configurations based on the provided arguments and current settings.
         with self._file_lock:
             # Defaults (snapshot)
             if log_folder is None:
@@ -278,15 +383,10 @@ class RotaryLogger:
                 self.file_data.set_max_size(max_filesize)
 
             # snapshot file_data-derived configuration to avoid nested locks
-            _override = self.file_data.get_override()
-            _encoding = self.file_data.get_encoding()
-            _prefix = self.file_data.get_prefix()
-            _max_size_mb = self.file_data.get_max_size()
-            _flush_size_kb = self.file_data.get_flush_size()
-            if merged is None:
-                _merged_flag = self.file_data.merged
-            else:
-                _merged_flag = bool(merged)
+            if merged is not None:
+                self.file_data.set_merged(merged)
+            if merge_stdin is not None:
+                self.file_data.set_merge_stdin(merge_stdin)
 
         # Determine final log folder using the built-in verification (outside lock)
         _log_folder = self._verify_user_log_path(_raw_folder)
@@ -295,75 +395,60 @@ class RotaryLogger:
         # Apply user-provided max size
         self.file_data.set_max_size(self._get_user_max_file_size())
 
-        if _merged_flag:
-            mixed_inst: FileInstance = FileInstance(
-                file_path=_log_folder,
-                override=_override,
-                merged=True,
-                encoding=_encoding,
-                prefix=_prefix,
-                max_size_mb=_max_size_mb,
-                flush_size_kb=_flush_size_kb,
-                folder_prefix=None
-            )
-
-            stdout_inst = mixed_inst
-            stderr_inst = mixed_inst
-        else:
-            out_inst: FileInstance = FileInstance(
-                file_path=_log_folder,
-                override=_override,
-                merged=False,
-                encoding=_encoding,
-                prefix=_prefix,
-                max_size_mb=_max_size_mb,
-                flush_size_kb=_flush_size_kb,
-                folder_prefix=CONST.StdMode.STDOUT
-            )
-            err_inst: FileInstance = FileInstance(
-                file_path=_log_folder,
-                override=_override,
-                merged=False,
-                encoding=_encoding,
-                prefix=_prefix,
-                max_size_mb=_max_size_mb,
-                flush_size_kb=_flush_size_kb,
-                folder_prefix=CONST.StdMode.STDERR
-            )
-
-            stdout_inst = out_inst
-            stderr_inst = err_inst
-
+        # Create the file descriptor instances based on the current configuration (outside lock)
+        self._handle_stream_assignments(_log_folder)
         # Construct TeeStream instances outside the lock to avoid holding
         # `RotaryLogger._file_lock` while the TeeStream initializer may
         # acquire `FileInstance` locks. Then assign the globals under the
         # lock to keep the replacement atomic.
-        _stdout_stream = TeeStream(
-            stdout_inst,
-            sys.stdout,
-            mode=CONST.StdMode.STDOUT,
-            log_to_file=log_to_file,
-            log_function_calls=self.log_function_calls_stdout
-        )
-        _stderr_stream = TeeStream(
-            stderr_inst,
-            sys.stderr,
-            mode=CONST.StdMode.STDERR,
-            log_to_file=log_to_file,
-            log_function_calls=self.log_function_calls_stderr
-        )
+        _stdin_stream: Optional[TeeStream] = None
+        _stdout_stream: Optional[TeeStream] = None
+        _stderr_stream: Optional[TeeStream] = None
+        if self._file_stream_instances.stdin:
+            _stdin_stream = TeeStream(
+                self._file_stream_instances.stdin,
+                sys.stdin,
+                mode=CONST.StdMode.STDIN,
+                log_to_file=log_to_file,
+                log_function_calls=self.log_function_calls_stdin
+            )
+        if self._file_stream_instances.stdout:
+            _stdout_stream = TeeStream(
+                self._file_stream_instances.stdout,
+                sys.stdout,
+                mode=CONST.StdMode.STDOUT,
+                log_to_file=log_to_file,
+                log_function_calls=self.log_function_calls_stdout
+            )
+        if self._file_stream_instances.stderr:
+            _stderr_stream = TeeStream(
+                self._file_stream_instances.stderr,
+                sys.stderr,
+                mode=CONST.StdMode.STDERR,
+                log_to_file=log_to_file,
+                log_function_calls=self.log_function_calls_stderr
+            )
 
         with self._file_lock:
-            sys.stdout = _stdout_stream
-            sys.stderr = _stderr_stream
-            self.stdout_stream = _stdout_stream
-            self.stderr_stream = _stderr_stream
+            if _stdin_stream:
+                sys.stdin = _stdin_stream
+                self.stdin_stream = _stdin_stream
+            if _stdout_stream:
+                sys.stdout = _stdout_stream
+                self.stdout_stream = _stdout_stream
+            if _stderr_stream:
+                sys.stderr = _stderr_stream
+                self.stderr_stream = _stderr_stream
 
             # Ensure final flush at exit, but only register once
             if not self._atexit_registered:
-                self._registered_flushers = [
-                    self.stdout_stream.flush, self.stderr_stream.flush
-                ]
+                self._registered_flushers = []
+                if self.stdin_stream:
+                    self._registered_flushers.append(self.stdin_stream.flush)
+                if self.stdout_stream:
+                    self._registered_flushers.append(self.stdout_stream.flush)
+                if self.stderr_stream:
+                    self._registered_flushers.append(self.stderr_stream.flush)
                 try:
                     for f in self._registered_flushers:
                         atexit.register(f)
