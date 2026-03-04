@@ -1,4 +1,4 @@
-build ==1.3.0
+build ==1.4.0
 pytest ==9.0.1
 
 # ask_question runtime dependencies
