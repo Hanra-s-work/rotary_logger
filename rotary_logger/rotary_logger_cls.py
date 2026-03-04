@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: rotary_logger.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 2:9:30 04-03-2026
+# LAST Modified: 2:13:0 04-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -589,9 +589,14 @@ class RotaryLogger:
             True if at least one TeeStream is installed and the logger is not paused.
         """
         with self._file_lock:
-            has_stream = bool(
-                self.stdout_stream or self.stderr_stream or self.stdin_stream
+            has_stream = (
+                self.stdout_stream is not None
+            ) or (
+                self.stderr_stream is not None
+            ) or (
+                self.stdin_stream is not None
             )
+
         return has_stream and (not bool(self.paused))
 
     def stop_logging(self) -> None:
@@ -605,15 +610,15 @@ class RotaryLogger:
         """
         to_flush = []
         with self._file_lock:
-            if self.stdout_stream:
+            if self.stdout_stream is not None:
                 sys.stdout = self.stdout_stream.original_stream
                 to_flush.append(self.stdout_stream)
                 self.stdout_stream = None
-            if self.stderr_stream:
+            if self.stderr_stream is not None:
                 sys.stderr = self.stderr_stream.original_stream
                 to_flush.append(self.stderr_stream)
                 self.stderr_stream = None
-            if self.stdin_stream:
+            if self.stdin_stream is not None:
                 sys.stdin = self.stdin_stream.original_stream
                 to_flush.append(self.stdin_stream)
                 self.stdin_stream = None
