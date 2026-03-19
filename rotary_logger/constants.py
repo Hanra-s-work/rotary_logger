@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: constants.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 3:34:22 04-03-2026
+# LAST Modified: 4:48:9 19-03-2026
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -216,3 +216,17 @@ class FileStreamInstances:
         StdMode.STDERR: False,
         StdMode.STDUNKNOWN: False
     })
+
+
+@dataclass(frozen=True)
+class LogToggle:
+    """
+    The settings for the logger to know if it can output the line for the given level.
+    """
+    program_log: bool = True
+    success: bool = True
+    info: bool = True
+    warning: bool = True
+    error: bool = True
+    critical: bool = True
+    debug: bool = True
