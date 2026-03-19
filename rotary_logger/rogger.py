@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: rogger.py
 # CREATION DATE: 18-03-2026
-# LAST Modified: 4:48:39 19-03-2026
+# LAST Modified: 5:55:37 19-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -37,7 +37,6 @@ import inspect
 from threading import RLock
 from datetime import datetime
 from typing import Optional, TextIO, Union, TYPE_CHECKING
-from dataclasses import dataclass
 from .constants import MODULE_NAME, LogToggle
 
 if TYPE_CHECKING:
@@ -163,6 +162,65 @@ class Rogger:
         final += f",{now.microsecond // 1000:03d}"
         return final
 
+    def _get_class_name(self, depth: int = 1) -> Optional[str]:
+        """Determine the name of the class that called the log
+
+        Args:
+            depth (int, optional): The upstream depth to look into. Defaults to 2.
+
+        Returns:
+            Optional[str]: The name of the class (if any)
+        """
+        if self.toggles.program_log is False:
+            return None
+
+        try:
+            frame = inspect.currentframe()
+        # type: ignore[reportBroadException]  # pylint: disable=broad-exception-caught
+        except Exception:
+            return None
+        if frame is None:
+            return None
+
+        try:
+            current_depth = 0
+            while current_depth < depth:
+                if frame and frame.f_back is not None:
+                    frame = frame.f_back
+                else:
+                    frame = None
+                    break
+                current_depth += 1
+        # type: ignore[reportBroadException]  # pylint: disable=broad-exception-caught
+        except Exception:
+            return None
+
+        if frame is None:
+            return None
+        try:
+            locals_ = frame.f_locals
+        # type: ignore[reportBroadException]  # pylint: disable=broad-exception-caught
+        except Exception:
+            return None
+
+        # Instance method
+        if "self" in locals_:
+            try:
+                return type(locals_["self"]).__name__
+        # type: ignore[reportBroadException]  # pylint: disable=broad-exception-caught
+            except Exception:
+                return None
+
+        # Class method
+        if "cls" in locals_:
+            try:
+                return locals_["cls"].__name__
+        # type: ignore[reportBroadException]  # pylint: disable=broad-exception-caught
+            except Exception:
+                return None
+
+        return None
+
     def _get_function_name(self, depth: int = 2) -> Optional[str]:
         """Determine the name of the function that called the log
 
@@ -174,21 +232,34 @@ class Rogger:
         """
         if self.toggles.program_log is False:
             return None
-        _func_name = inspect.currentframe()
+        try:
+            _func_name = inspect.currentframe()
+        # type: ignore[reportBroadException]  # pylint: disable=broad-exception-caught
+        except Exception:
+            return None
         if _func_name is None:
             return None
         current_depth = 0
-        while current_depth < depth:
-            if _func_name and _func_name.f_back is not None:
-                _func_name = _func_name.f_back
-            else:
-                _func_name = None
-            current_depth += 1
-        if _func_name is not None:
+        try:
+            while current_depth < depth:
+                if _func_name and _func_name.f_back is not None:
+                    _func_name = _func_name.f_back
+                else:
+                    _func_name = None
+                    break
+                current_depth += 1
+        # type: ignore[reportBroadException]  # pylint: disable=broad-exception-caught
+        except Exception:
+            return None
+        if _func_name is None:
+            return None
+        try:
             return _func_name.f_code.co_name
-        return None
+        # type: ignore[reportBroadException]  # pylint: disable=broad-exception-caught
+        except Exception:
+            return None
 
-    def _log_if_possible(self, log_type: str, message: str, function_name: Optional[str], stream: Union[TextIO, "TeeStream"]) -> None:
+    def _log_if_possible(self, log_type: str, message: str, function_name: Optional[str], class_name: Optional[str], stream: Union[TextIO, "TeeStream"]) -> None:
         """The generic function to log the message to the provided stream
 
         Args:
@@ -199,121 +270,151 @@ class Rogger:
         """
         if function_name is None:
             function_name = self._get_function_name(3) or "Unknown"
+        if class_name is None:
+            class_name = self._get_class_name(1) or "Unknown"
         date = self._get_date()
-        final_msg = f"[{date}] {self.program_name} {log_type} ({function_name}): {message}\n"
+        final_msg = f"[{date}] {self.program_name} {log_type} ({class_name}.{function_name}): {message}\n"
         with self._function_lock:
             stream.write(final_msg)
 
-    def log_success(self, message: str, *, function_name: Optional[str] = None, stream: Union[TextIO, "TeeStream"] = sys.stdout) -> None:
+    def log_success(self, message: str, *, function_name: Optional[str] = None, class_name: Optional[str] = None, stream: Union[TextIO, "TeeStream"] = sys.stdout) -> None:
         """Log a success message to the stream (if logging conditions are met)
 
         Args:
             message (str): The message to display
             function_name (Optional[str], optional): The name of the function calling it. Defaults to None.
+            class_name (Optional[str], optional): The name of the class calling it. Defaults to None.
             stream (Union[TextIO, TeeStream], optional): The stream to write to. Defaults to sys.stdout.
         """
         if self.toggles.success is False:
             return
         if function_name is None:
             function_name = self._get_function_name(2)
+        if class_name is None:
+            class_name = self._get_class_name(1)
         self._log_if_possible(
             log_type=self.success,
             message=message,
             function_name=function_name,
+            class_name=class_name,
             stream=stream
         )
 
-    def log_info(self, message: str, *, function_name: Optional[str] = None, stream: Union[TextIO, "TeeStream"] = sys.stdout) -> None:
+    def log_info(self, message: str, *, function_name: Optional[str] = None, class_name: Optional[str] = None, stream: Union[TextIO, "TeeStream"] = sys.stdout) -> None:
         """Log a info message to the stream (if logging conditions are met)
 
         Args:
             message (str): The message to display
             function_name (Optional[str], optional): The name of the function calling it. Defaults to None.
+            class_name (Optional[str], optional): The name of the class calling it. Defaults to None.
             stream (Union[TextIO, TeeStream], optional): The stream to write to. Defaults to sys.stdout.
         """
         if self.toggles.info is False:
             return
         if function_name is None:
             function_name = self._get_function_name(2)
+        if class_name is None:
+            class_name = self._get_class_name(1)
         self._log_if_possible(
-            log_type=self.info,
+            log_type=self.success,
             message=message,
             function_name=function_name,
+            class_name=class_name,
             stream=stream
         )
 
-    def log_warning(self, message: str, *, function_name: Optional[str] = None, stream: Union[TextIO, "TeeStream"] = sys.stderr) -> None:
+    def log_warning(self, message: str, *, function_name: Optional[str] = None, class_name: Optional[str] = None, stream: Union[TextIO, "TeeStream"] = sys.stderr) -> None:
         """Log a warning message to the stream (if logging conditions are met)
 
         Args:
             message (str): The message to display
             function_name (Optional[str], optional): The name of the function calling it. Defaults to None.
-            stream (Union[TextIO, TeeStream], optional): The stream to write to. Defaults to sys.stdout.
+            class_name (Optional[str], optional): The name of the class calling it. Defaults to None.
+            stream (Union[TextIO, TeeStream], optional): The stream to write to. Defaults to sys.stderr.
         """
         if self.toggles.warning is False:
             return
         if function_name is None:
             function_name = self._get_function_name(2)
+        if class_name is None:
+            class_name = self._get_class_name(1)
         self._log_if_possible(
-            log_type=self.warning,
+            log_type=self.success,
             message=message,
             function_name=function_name,
+            class_name=class_name,
             stream=stream
         )
 
-    def log_error(self, message: str, *, function_name: Optional[str] = None, stream: Union[TextIO, "TeeStream"] = sys.stderr) -> None:
+    def log_error(self, message: str, *, function_name: Optional[str] = None, class_name: Optional[str] = None, stream: Union[TextIO, "TeeStream"] = sys.stderr) -> None:
         """Log an error message to the stream (if logging conditions are met)
 
         Args:
             message (str): The message to display
             function_name (Optional[str], optional): The name of the function calling it. Defaults to None.
-            stream (Union[TextIO, TeeStream], optional): The stream to write to. Defaults to sys.stdout.
+            class_name (Optional[str], optional): The name of the class calling it. Defaults to None.
+            stream (Union[TextIO, TeeStream], optional): The stream to write to. Defaults to sys.stderr.
         """
         if self.toggles.error is False:
             return
         if function_name is None:
             function_name = self._get_function_name(2)
+        if class_name is None:
+            class_name = self._get_class_name(1)
         self._log_if_possible(
-            log_type=self.error,
+            log_type=self.success,
             message=message,
             function_name=function_name,
+            class_name=class_name,
             stream=stream
         )
 
-    def log_critical(self, message: str, *, function_name: Optional[str] = None, stream: Union[TextIO, "TeeStream"] = sys.stderr) -> None:
+    def log_critical(self, message: str, *, function_name: Optional[str] = None, class_name: Optional[str] = None, stream: Union[TextIO, "TeeStream"] = sys.stderr) -> None:
         """Log a critical message to the stream (if logging conditions are met)
 
         Args:
             message (str): The message to display
             function_name (Optional[str], optional): The name of the function calling it. Defaults to None.
-            stream (Union[TextIO, TeeStream], optional): The stream to write to. Defaults to sys.stdout.
+            class_name (Optional[str], optional): The name of the class calling it. Defaults to None.
+            stream (Union[TextIO, TeeStream], optional): The stream to write to. Defaults to sys.stderr.
         """
         if self.toggles.critical is False:
             return
         if function_name is None:
             function_name = self._get_function_name(2)
+        if class_name is None:
+            class_name = self._get_class_name(1)
         self._log_if_possible(
-            log_type=self.critical,
+            log_type=self.success,
             message=message,
             function_name=function_name,
+            class_name=class_name,
             stream=stream
         )
 
-    def log_debug(self, message: str, *, function_name: Optional[str] = None, stream: Union[TextIO, "TeeStream"] = sys.stdout) -> None:
+    def log_debug(self, message: str, *, function_name: Optional[str] = None, class_name: Optional[str] = None, stream: Union[TextIO, "TeeStream"] = sys.stdout) -> None:
         """Log a debug message to the stream (if logging conditions are met)
 
         Args:
             message (str): The message to display
             function_name (Optional[str], optional): The name of the function calling it. Defaults to None.
+            class_name (Optional[str], optional): The name of the class calling it. Defaults to None.
             stream (Union[TextIO, TeeStream], optional): The stream to write to. Defaults to sys.stdout.
         """
         if self.toggles.debug is False:
             return
         if function_name is None:
             function_name = self._get_function_name(2)
+        if class_name is None:
+            class_name = self._get_class_name(1)
         self._log_if_possible(
-            log_type=self.debug,
+            log_type=self.success,
             message=message,
             function_name=function_name,
+            class_name=class_name,
             stream=stream
         )
+
+
+# Module-level shared Rogger instance for convenience (used by TeeStream and others)
+RI: Rogger = Rogger()

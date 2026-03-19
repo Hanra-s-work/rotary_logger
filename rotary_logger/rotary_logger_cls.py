@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: rotary_logger.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 5:10:42 19-03-2026
+# LAST Modified: 5:14:10 19-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -45,12 +45,12 @@ try:
     from . import constants as CONST
     from .tee_stream import TeeStream
     from .file_instance import FileInstance
-    from .rogger import Rogger
+    from .rogger import Rogger, RI
 except ImportError:
     import constants as CONST
     from tee_stream import TeeStream
     from file_instance import FileInstance
-    from rogger import Rogger
+    from rogger import Rogger, RI
 
 
 class RotaryLogger:
@@ -159,7 +159,7 @@ class RotaryLogger:
         self.program_debug_log = program_debug_log
         self.suppress_program_warning_logs = suppress_program_warning_logs
         self.suppress_program_error_logs = suppress_program_error_logs
-        self.rogger: Rogger = Rogger()
+        self.rogger: Rogger = RI
         self.rogger.re_toggle(
             self.program_log,
             self.program_debug_log,
