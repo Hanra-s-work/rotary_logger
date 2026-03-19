@@ -1,6 +1,6 @@
-""" 
+"""
 # +==== BEGIN rotary_logger =================+
-# LOGO: 
+# LOGO:
 # ..........####...####..........
 # ......###.....#.#########......
 # ....##........#.###########....
@@ -22,8 +22,8 @@
 # PROJECT: rotary_logger
 # FILE: tee_stream.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 17:0:39 03-03-2026
-# DESCRIPTION: 
+# LAST Modified: 5:49:55 19-03-2026
+# DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
 # COPYRIGHT: (c) Asperguide
@@ -40,9 +40,11 @@ from threading import RLock
 try:
     from . import constants as CONST
     from .file_instance import FileInstance
+    from .rogger import Rogger, RI
 except ImportError:
     import constants as CONST
     from file_instance import FileInstance
+    from rogger import Rogger, RI
 
 
 class TeeStream:
@@ -113,6 +115,16 @@ class TeeStream:
             f"{CONST.MODULE_NAME} No stream available"
         )
         self.function_calls = log_function_calls
+        self.rogger: Rogger = RI
+        # Log TeeStream creation
+        try:
+            self.rogger.log_debug(
+                f"TeeStream initialized (mode={self.stream_mode}, log_to_file={log_to_file})",
+                stream=sys.stdout
+            )
+        except (AttributeError, OSError, ValueError):
+            # Never allow logging to break stream setup
+            pass
 
     def __del__(self):
         """Best-effort cleanup on object deletion.
@@ -283,6 +295,14 @@ class TeeStream:
                 pass
 
         self._write_to_log(_tmp_message, CONST.PrefixFunctionCall.WRITE)
+        try:
+            # Debug log about the write operation (non-intrusive)
+            self.rogger.log_debug(
+                f"write: forwarded {len(_tmp_message)} chars to original stream (mode={self.stream_mode})",
+                stream=sys.stdout
+            )
+        except (AttributeError, OSError, ValueError):
+            pass
 
     def writelines(self, lines: List[str]) -> None:
         """Write a list of strings to the original stream and buffer them to the log file.
@@ -317,6 +337,16 @@ class TeeStream:
                 # swallow any errors writing to stderr during shutdown
                 pass
         self._write_to_log(_tmp_message, CONST.PrefixFunctionCall.WRITELINES)
+        try:
+            total = 0
+            for l in _tmp_message:
+                total += len(l)
+            self.rogger.log_debug(
+                f"writelines: forwarded {total} chars across {len(_tmp_message)} items (mode={self.stream_mode})",
+                stream=sys.stdout
+            )
+        except (AttributeError, OSError, ValueError):
+            pass
 
     def read(self, size: int = -1) -> str:
         """Read and return up to size characters from the original stream.
@@ -334,6 +364,13 @@ class TeeStream:
         # Always attempt to read from the original stream first so that we don't lose data if the stream is interactive and the file instance is misconfigured
         data = self._get_stream_if_present().read(size)
         self._write_to_log(data, CONST.PrefixFunctionCall.READ)
+        try:
+            self.rogger.log_debug(
+                f"read: read {len(data)} chars from original stream (mode={self.stream_mode})",
+                stream=sys.stdout
+            )
+        except (AttributeError, OSError, ValueError):
+            pass
         return data
 
     def readline(self, size: int = -1) -> str:
@@ -350,6 +387,13 @@ class TeeStream:
         """
         data = self._get_stream_if_present().readline(size)
         self._write_to_log(data, CONST.PrefixFunctionCall.READLINE)
+        try:
+            self.rogger.log_debug(
+                f"readline: read {len(data)} chars from original stream (mode={self.stream_mode})",
+                stream=sys.stdout
+            )
+        except (AttributeError, OSError, ValueError):
+            pass
         return data
 
     def readlines(self, hint: int = -1) -> list[str]:
@@ -366,6 +410,16 @@ class TeeStream:
         """
         data = self._get_stream_if_present().readlines(hint)
         self._write_to_log(data, CONST.PrefixFunctionCall.READLINES)
+        try:
+            total = 0
+            for d in data:
+                total += len(d)
+            self.rogger.log_debug(
+                f"readlines: read {len(data)} lines, {total} chars (mode={self.stream_mode})",
+                stream=sys.stdout
+            )
+        except (AttributeError, OSError, ValueError):
+            pass
         return data
 
     def flush(self) -> None:
@@ -379,6 +433,13 @@ class TeeStream:
         """
 
         # Flush the original stream first (best-effort)
+        try:
+            self.rogger.log_debug(
+                f"Flushing TeeStream (mode={self.stream_mode})",
+                stream=sys.stdout
+            )
+        except (AttributeError, OSError, ValueError):
+            pass
         if not self.original_stream.closed:
             try:
                 self.original_stream.flush()
@@ -414,9 +475,22 @@ class TeeStream:
                         _prefix: str = ""
                     _file_instance.write(_prefix)
                 _file_instance.flush()
+                try:
+                    self.rogger.log_debug(
+                        f"Flushed file_instance for mode={self.stream_mode}",
+                        stream=sys.stdout
+                    )
+                except (AttributeError, OSError, ValueError):
+                    pass
             except (OSError, ValueError):
+                try:
+                    self.rogger.log_warning(
+                        f"TeeStream flush encountered I/O error for mode={self.stream_mode}",
+                        stream=sys.stderr
+                    )
+                except (AttributeError, OSError, ValueError):
+                    pass
                 # don't let file flush failures propagate from a best-effort flush
-                pass
 
     # sys.TextIO rebinds so the redirection is transparent to the caller
 
@@ -536,6 +610,13 @@ class TeeStream:
         Raises:
             AttributeError: If the original stream is not set.
         """
+        try:
+            self.rogger.log_info(
+                f"Closing TeeStream (mode={self.stream_mode})",
+                stream=sys.stdout
+            )
+        except (AttributeError, OSError, ValueError):
+            pass
         self.flush()
         self._get_stream_if_present().close()
 
