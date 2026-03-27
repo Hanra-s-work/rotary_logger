@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: rogger.py
 # CREATION DATE: 18-03-2026
-# LAST Modified: 5:55:37 19-03-2026
+# LAST Modified: 23:13:3 26-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -271,7 +271,7 @@ class Rogger:
         if function_name is None:
             function_name = self._get_function_name(3) or "Unknown"
         if class_name is None:
-            class_name = self._get_class_name(1) or "Unknown"
+            class_name = self._get_class_name(2) or "Unknown"
         date = self._get_date()
         final_msg = f"[{date}] {self.program_name} {log_type} ({class_name}.{function_name}): {message}\n"
         with self._function_lock:
@@ -291,7 +291,7 @@ class Rogger:
         if function_name is None:
             function_name = self._get_function_name(2)
         if class_name is None:
-            class_name = self._get_class_name(1)
+            class_name = self._get_class_name(2)
         self._log_if_possible(
             log_type=self.success,
             message=message,
@@ -314,7 +314,7 @@ class Rogger:
         if function_name is None:
             function_name = self._get_function_name(2)
         if class_name is None:
-            class_name = self._get_class_name(1)
+            class_name = self._get_class_name(2)
         self._log_if_possible(
             log_type=self.success,
             message=message,
@@ -337,7 +337,7 @@ class Rogger:
         if function_name is None:
             function_name = self._get_function_name(2)
         if class_name is None:
-            class_name = self._get_class_name(1)
+            class_name = self._get_class_name(2)
         self._log_if_possible(
             log_type=self.success,
             message=message,
@@ -360,7 +360,7 @@ class Rogger:
         if function_name is None:
             function_name = self._get_function_name(2)
         if class_name is None:
-            class_name = self._get_class_name(1)
+            class_name = self._get_class_name(2)
         self._log_if_possible(
             log_type=self.success,
             message=message,
@@ -383,7 +383,7 @@ class Rogger:
         if function_name is None:
             function_name = self._get_function_name(2)
         if class_name is None:
-            class_name = self._get_class_name(1)
+            class_name = self._get_class_name(2)
         self._log_if_possible(
             log_type=self.success,
             message=message,
@@ -406,7 +406,7 @@ class Rogger:
         if function_name is None:
             function_name = self._get_function_name(2)
         if class_name is None:
-            class_name = self._get_class_name(1)
+            class_name = self._get_class_name(2)
         self._log_if_possible(
             log_type=self.success,
             message=message,

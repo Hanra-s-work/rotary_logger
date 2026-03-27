@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: file_instance.py
 # CREATION DATE: 30-10-2025
-# LAST Modified: 6:9:23 19-03-2026
+# LAST Modified: 23:22:16 26-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -148,14 +148,14 @@ class FileInstance:
                     pass
         self.file = None
 
-    def set_log_to_file(self, log_to_file: bool, *, lock: bool = True) -> None:
+    def set_log_to_file(self, log_to_file: bool = True, *, lock: bool = True) -> None:
         """Enable or disable file logging.
 
         When `log_to_file` is False no data will be written to disk even
         if a file descriptor is open.
 
         Arguments:
-            log_to_file (bool): Whether writes to the log file are enabled.
+            log_to_file (bool): Whether writes to the log file are enabled. Default: True
 
         Keyword Arguments:
             lock (bool): When True the instance lock is acquired while updating the flag. Default: True

@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: tee_stream.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 19:51:27 26-03-2026
+# LAST Modified: 23:18:32 26-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -784,7 +784,10 @@ class TeeStream:
             # Delegate to underlying iterator protocol and log the line
             line = next_method()
             try:
-                self._write_to_log(line, CONST.PrefixFunctionCall.READLINE)
+                self._write_to_log(
+                    str(line),
+                    CONST.PrefixFunctionCall.READLINE
+                )
             except (OSError, ValueError, AttributeError):
                 pass
             return line

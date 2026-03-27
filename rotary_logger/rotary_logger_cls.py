@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: rotary_logger.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 5:14:10 19-03-2026
+# LAST Modified: 1:43:57 27-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -354,7 +354,8 @@ class RotaryLogger:
                 max_size_mb=_max_size_mb,
                 flush_size_kb=_flush_size_kb,
                 folder_prefix=None,
-                merge_stdin=_merge_stdin_flag
+                merge_stdin=_merge_stdin_flag,
+                log_to_file=self.log_to_file,
             )
 
             self._file_stream_instances.stdout = mixed_inst
@@ -374,7 +375,8 @@ class RotaryLogger:
                     max_size_mb=_max_size_mb,
                     flush_size_kb=_flush_size_kb,
                     folder_prefix=CONST.StdMode.STDIN,
-                    merge_stdin=False
+                    merge_stdin=False,
+                    log_to_file=self.log_to_file,
                 )
             self.rogger.log_info(
                 f"Created merged FileInstance for stdout/stderr at {log_folder}",
@@ -390,7 +392,8 @@ class RotaryLogger:
                 max_size_mb=_max_size_mb,
                 flush_size_kb=_flush_size_kb,
                 folder_prefix=CONST.StdMode.STDIN,
-                merge_stdin=False
+                merge_stdin=False,
+                log_to_file=self.log_to_file,
             )
             self._file_stream_instances.stdout = FileInstance(
                 file_path=log_folder,
@@ -401,7 +404,8 @@ class RotaryLogger:
                 max_size_mb=_max_size_mb,
                 flush_size_kb=_flush_size_kb,
                 folder_prefix=CONST.StdMode.STDOUT,
-                merge_stdin=_merge_stdin_flag
+                merge_stdin=_merge_stdin_flag,
+                log_to_file=self.log_to_file,
             )
             self._file_stream_instances.stderr = FileInstance(
                 file_path=log_folder,
@@ -412,7 +416,8 @@ class RotaryLogger:
                 max_size_mb=_max_size_mb,
                 flush_size_kb=_flush_size_kb,
                 folder_prefix=CONST.StdMode.STDERR,
-                merge_stdin=_merge_stdin_flag
+                merge_stdin=_merge_stdin_flag,
+                log_to_file=self.log_to_file,
             )
 
             self._file_stream_instances.merged_streams[CONST.StdMode.STDOUT] = False
@@ -482,10 +487,18 @@ class RotaryLogger:
                 self.file_data.set_merged(merged)
             if merge_stdin is not None:
                 self.file_data.set_merge_stdin(merge_stdin)
+            # Honor the requested log_to_file flag for newly-created FileInstance
+            # objects so we don't create/ open descriptors when file logging is
+            # explicitly disabled by the caller.
+            self.log_to_file = bool(log_to_file)
+            self.rogger.log_debug(
+                f"Self Log to file = {self.log_to_file}, Log to file = {log_to_file}"
+            )
 
         # Determine final log folder using the built-in verification (outside lock)
-        _log_folder: Path = self._verify_user_log_path(_raw_folder)
-        _log_folder.mkdir(parents=True, exist_ok=True)
+        if log_to_file is True:
+            _log_folder: Path = self._verify_user_log_path(_raw_folder)
+            _log_folder.mkdir(parents=True, exist_ok=True)
 
         # Create the file descriptor instances based on the current configuration (outside lock)
         self._handle_stream_assignments(_log_folder)
@@ -512,6 +525,9 @@ class RotaryLogger:
                 self.rogger.log_info(
                     "Stdin is not yet being redirected, redirecting",
                     stream=sys.stdout
+                )
+                self.rogger.log_debug(
+                    f"(stdin) Log to file: {log_to_file}"
                 )
                 _stdin_stream = TeeStream(
                     self._file_stream_instances.stdin,
@@ -541,6 +557,9 @@ class RotaryLogger:
                     "Stdout is not yet being redirected, redirecting",
                     stream=sys.stdout
                 )
+                self.rogger.log_debug(
+                    f"(stdout) Log to file: {log_to_file}"
+                )
                 _stdout_stream = TeeStream(
                     self._file_stream_instances.stdout,
                     sys.stdout,
@@ -568,6 +587,9 @@ class RotaryLogger:
                 self.rogger.log_info(
                     "Stderr is not yet being redirected, redirecting",
                     stream=sys.stdout
+                )
+                self.rogger.log_debug(
+                    f"(stderr) Log to file: {log_to_file}"
                 )
                 _stderr_stream = TeeStream(
                     self._file_stream_instances.stderr,
