@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: entrypoint.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 18:12:28 03-03-2026
+# LAST Modified: 1:31:47 27-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -71,12 +71,38 @@ class Tee:
         self.args = self._parse_args()
         self._handle_interrupts_if_required()
 
-        # Create and configure the logger
-        # Create and configure the high-level RotaryLogger instance
+        log_function_calls_stdin = False
+        log_function_calls_stdout = False
+        log_function_calls_stderr = False
+        program_log = False
+        program_debug_log = False
+        if self.args.verbose is True:
+            log_function_calls_stdin = True
+            log_function_calls_stdout = True
+            log_function_calls_stderr = True
+            program_log = True
+            program_debug_log = True
+
+        # Create and configure the logger. We do not start file logging here;
+        # the `run()` method will only call `start_logging()` when a folder
+        # or positional file argument was provided (matching traditional `tee`
+        # behaviour where no files => no file output).
         self.rotary_logger: RotaryLogger = RotaryLogger(
-            log_to_file=True,
+            log_to_file=False,
             override=not self.args.append,
             merge_streams=self.args.merge,
+            merge_stdin=self.args.merge_stdin,
+            capture_stdin=self.args.capture_stdin,
+            capture_stdout=self.args.capture_stdout,
+            capture_stderr=self.args.capture_stderr,
+            prefix_in_stream=self.args.prefix_in,
+            prefix_out_stream=self.args.prefix_out,
+            prefix_err_stream=self.args.prefix_err,
+            log_function_calls_stdin=log_function_calls_stdin,
+            log_function_calls_stdout=log_function_calls_stdout,
+            log_function_calls_stderr=log_function_calls_stderr,
+            program_log=program_log,
+            program_debug_log=program_debug_log,
         )
 
     def _parse_args(self):
@@ -100,12 +126,61 @@ class Tee:
             help="Merge stdout and stderr into a single log file"
         )
         parser.add_argument(
+            "-mi", "--merge-stdin", action="store_true",
+            help="Merge stdin into the same file as stdout and stderr"
+        )
+        parser.add_argument(
             "-i", "--ignore-interrupts", action="store_true",
             help="Ignore Ctrl+C (SIGINT)"
         )
         parser.add_argument(
             "-s", "--max-size", type=int, default=None,
             help="Maximum log file size in MB before rotation"
+        )
+        parser.add_argument(
+            "-V", "--verbose", action="store_true",
+            help="Activate all debug logging options of the program"
+        )
+        # Additional options to control folder behaviour and prefixes
+        parser.add_argument(
+            "--log-folder", "-F", dest="log_folder", default=None,
+            help="Destination log folder (when omitted no file logging will occur)"
+        )
+        parser.add_argument(
+            "--create-folder", action="store_true", dest="create_folder", default=False,
+            help="Create the log folder if it does not exist (use with --log-folder or positional file)",
+        )
+
+        # Prefix toggles: disabled by default; use `--prefix-*` to enable
+        parser.set_defaults(
+            prefix_in=False, prefix_out=False, prefix_err=False)
+        parser.add_argument(
+            "--prefix-stdin", dest="prefix_in", action="store_true",
+            help="Prepend STDIN label to logged stdin entries"
+        )
+        parser.add_argument(
+            "--prefix-stdout", dest="prefix_out", action="store_true",
+            help="Prepend STDOUT label to logged stdout entries"
+        )
+        parser.add_argument(
+            "--prefix-stderr", dest="prefix_err", action="store_true",
+            help="Prepend STDERR label to logged stderr entries"
+        )
+
+        # Capture toggles: stdin capture is opt-in; stdout/stderr captured by default
+        parser.set_defaults(capture_stdout=True,
+                            capture_stderr=True, capture_stdin=False)
+        parser.add_argument(
+            "--capture-stdin", dest="capture_stdin", action="store_true",
+            help="Capture stdin (wrap sys.stdin)"
+        )
+        parser.add_argument(
+            "--no-capture-stdout", dest="capture_stdout", action="store_false",
+            help="Do not capture stdout"
+        )
+        parser.add_argument(
+            "--no-capture-stderr", dest="capture_stderr", action="store_false",
+            help="Do not capture stderr"
         )
         return parser.parse_args()
 
@@ -145,17 +220,16 @@ class Tee:
         configured error policy and KeyboardInterrupt when interrupts are
         not suppressed.
         """
-        # Determine whether file logging is requested and normalise the
-        # provided files argument into a single Path (or None). The
-        # argparse `files` is a list (nargs='*'), so map it to a Path if
-        # present; if multiple paths are provided, use the first and warn.
-        if not self.args.files:
-            _log_to_file = False
-            _log_folder = None
-        else:
+        # Determine whether file logging is requested. Behavior:
+        # - If `--log-folder` was provided, use it.
+        # - Else if a positional file was provided, use the first one.
+        # - Otherwise, do not enable file logging (matches `tee`).
+        if self.args.log_folder:
+            _log_to_file = True
+            _log_folder = Path(self.args.log_folder)
+        elif self.args.files:
             _log_to_file = True
             if len(self.args.files) > 1:
-                # Prefer the first provided argument but notify the user.
                 try:
                     sys.stderr.write(
                         f"{CONST.MODULE_NAME} Multiple destination files provided; using first: {self.args.files[0]}\n"
@@ -163,13 +237,42 @@ class Tee:
                 except OSError:
                     pass
             _log_folder = Path(self.args.files[0])
+        else:
+            _log_to_file = False
+            _log_folder = None
 
-        self.rotary_logger.start_logging(
-            log_folder=_log_folder,
-            max_filesize=self.args.max_size,
-            merged=self.args.merge,
-            log_to_file=_log_to_file
-        )
+        # If a folder was requested but does not exist, either create it
+        # (when --create-folder) or warn and disable file logging.
+        if _log_to_file and _log_folder is not None and not _log_folder.exists():
+            if self.args.create_folder:
+                try:
+                    _log_folder.mkdir(parents=True, exist_ok=True)
+                except OSError as e:
+                    try:
+                        sys.stderr.write(
+                            f"{CONST.MODULE_NAME} Could not create log folder: {_log_folder} -> {e}\n")
+                    except OSError:
+                        pass
+                    _log_to_file = False
+                    _log_folder = None
+            else:
+                try:
+                    sys.stderr.write(
+                        f"{CONST.MODULE_NAME} Log folder does not exist: {_log_folder}. Use --create-folder to create it. File logging disabled.\n"
+                    )
+                except OSError:
+                    pass
+                _log_to_file = False
+                _log_folder = None
+
+        # Only start file logging when explicitly requested.
+        if _log_to_file:
+            self.rotary_logger.start_logging(
+                log_folder=_log_folder,
+                max_filesize=self.args.max_size,
+                merged=self.args.merge,
+                log_to_file=_log_to_file
+            )
 
         try:
             for line in sys.stdin:

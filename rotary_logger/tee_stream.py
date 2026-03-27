@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: tee_stream.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 5:49:55 19-03-2026
+# LAST Modified: 19:51:27 26-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -761,3 +761,61 @@ class TeeStream:
         """
         data = self._get_stream_if_present().__exit__(exc_type, exc_val, exc_tb)
         return data
+
+    def __iter__(self):
+        """Return an iterator over the stream (line-by-line).
+
+        This makes `for line in tee_stream:` work like the underlying
+        TextIO object. Iteration yields lines as produced by `readline()`.
+        """
+        return self
+
+    def __next__(self):
+        """Return the next line from the wrapped stream, logging it.
+
+        Prefer delegating to the underlying stream's `__next__` if it
+        exists (and then log the returned line). Otherwise fall back to
+        `readline()` which already takes care of logging. Raise
+        `StopIteration` when the stream is exhausted.
+        """
+        stream = self._get_stream_if_present()
+        next_method = getattr(stream, "__next__", None)
+        if callable(next_method):
+            # Delegate to underlying iterator protocol and log the line
+            line = next_method()
+            try:
+                self._write_to_log(line, CONST.PrefixFunctionCall.READLINE)
+            except (OSError, ValueError, AttributeError):
+                pass
+            return line
+
+        # Fallback: use readline() which already logs
+        line = self.readline()
+        if line == "":
+            raise StopIteration
+        return line
+
+    def detach(self):
+        """Detach and return the underlying binary buffer if supported.
+
+        Delegates to the wrapped stream's `detach()` when present. If the
+        wrapped stream does not support `detach()` an AttributeError is
+        raised to mirror standard behavior.
+        """
+        stream = self._get_stream_if_present()
+        detach_method = getattr(stream, "detach", None)
+        if callable(detach_method):
+            return detach_method()
+        raise AttributeError(
+            f"{CONST.MODULE_NAME} underlying stream has no detach() method")
+
+    def __getattr__(self, name: str):
+        """Delegate attribute access to the wrapped stream for missing attrs.
+
+        This helps the TeeStream more closely mimic the wrapped TextIO
+        object without having to manually proxy every attribute.
+        """
+        # _get_stream_if_present will raise the same AttributeError we
+        # want when the underlying stream is missing.
+        stream = self._get_stream_if_present()
+        return getattr(stream, name)
