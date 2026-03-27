@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: python-package.yml
 # CREATION DATE: 29-10-2025
-# LAST Modified: 6:40:17 02-11-2025
+# LAST Modified: 6:33:17 27-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -215,7 +215,7 @@ jobs:
                 && echo "Installing pytest" \
                 && pip install pytest \
                 && echo "Running tests" \
-                && pytest -s \
+                && pytest -q \
               '
           else
             docker run --rm \
@@ -243,7 +243,7 @@ jobs:
                 pip3 install -r requirements.txt  --break-system-packages && \
                 pip3 install pytest  --break-system-packages && \
                 echo 'Running the tests' && \
-                pytest -s
+                pytest -q
               "
           fi
 

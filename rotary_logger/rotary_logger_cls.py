@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: rotary_logger.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 1:43:57 27-03-2026
+# LAST Modified: 5:11:39 27-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -495,10 +495,22 @@ class RotaryLogger:
                 f"Self Log to file = {self.log_to_file}, Log to file = {log_to_file}"
             )
 
-        # Determine final log folder using the built-in verification (outside lock)
+        # Determine final log folder using the built-in verification (outside lock).
+        # If file logging is requested, perform full verification and create
+        # the folder; otherwise compute a candidate path for internal use
+        # without touching the filesystem (avoids creating dirs when
+        # log_to_file is False).
         if log_to_file is True:
             _log_folder: Path = self._verify_user_log_path(_raw_folder)
             _log_folder.mkdir(parents=True, exist_ok=True)
+        else:
+            # Do not perform verification that may create or write files;
+            # instead create a non-strict Path that mirrors the final
+            # expected layout (append base folder name when missing).
+            candidate = Path(_raw_folder)
+            if candidate.name != CONST.LOG_FOLDER_BASE_NAME:
+                candidate = candidate / CONST.LOG_FOLDER_BASE_NAME
+            _log_folder = candidate.resolve(strict=False)
 
         # Create the file descriptor instances based on the current configuration (outside lock)
         self._handle_stream_assignments(_log_folder)
