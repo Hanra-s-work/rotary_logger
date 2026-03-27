@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: rotary_logger.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 9:36:49 27-03-2026
+# LAST Modified: 10:56:50 27-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -563,7 +563,7 @@ class RotaryLogger:
                     "Stdout stream is already being redirected, skipping redirection",
                     stream=CONST.RAW_STDERR
                 )
-                _stdin_stream = sys.stdout
+                _stdout_stream = sys.stdout
             else:
                 self.rogger.log_info(
                     "Stdout is not yet being redirected, redirecting",
@@ -617,8 +617,10 @@ class RotaryLogger:
                 )
 
         with self._file_lock:
-            self.rogger.log_info("redirecting streams",
-                                 stream=CONST.RAW_STDOUT)
+            self.rogger.log_info(
+                "redirecting streams",
+                stream=CONST.RAW_STDOUT
+            )
             self.rogger.log_debug(
                 f"Will assign streams: stdin={bool(_stdin_stream)}, stdout={bool(_stdout_stream)}, stderr={bool(_stderr_stream)}",
                 stream=CONST.RAW_STDOUT
