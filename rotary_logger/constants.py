@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: constants.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 10:8:18 27-03-2026
+# LAST Modified: 12:24:31 27-03-2026
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -50,6 +50,13 @@ MIM_STDIN = sys.stdin
 sys.stdout = MIM_STDOUT
 sys.stdin = MIM_STDIN
 sys.stderr = MIM_STDERR
+
+# Enable unbuffered output to ensure logs are captured immediately when redirected to files
+# This is critical when stdout/stderr are redirected (e.g., to a file)
+if not sys.flags.optimize or 'PYTHONUNBUFFERED' not in os.environ:
+    os.environ['PYTHONUNBUFFERED'] = '1'
+    sys.stdout.reconfigure(line_buffering=True)  # type: ignore
+    sys.stderr.reconfigure(line_buffering=True)  # type: ignore
 
 IS_A_TTY: bool = sys.stdout.isatty()
 IS_PIPE: bool = not IS_A_TTY
