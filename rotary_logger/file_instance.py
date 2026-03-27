@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: file_instance.py
 # CREATION DATE: 30-10-2025
-# LAST Modified: 10:18:3 27-03-2026
+# LAST Modified: 10:44:15 27-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -89,6 +89,7 @@ class FileInstance:
         """
 
         # per-instance mutable defaults (avoid sharing across instances)
+        self.rogger: Rogger = RI
         self._file_lock: RLock = RLock()
         self._mode: str = "a"
         self._log_to_file: bool = log_to_file
@@ -121,7 +122,6 @@ class FileInstance:
             self.set_folder_prefix(folder_prefix)
         if file_path is not None:
             self.set_filepath(file_path)
-        self.rogger: Rogger = RI
         try:
             self.rogger.log_success(
                 f"Initialized FileInstance with file_path={file_path}, override={override}, merged={merged}, encoding={encoding}, prefix={prefix}, max_size_mb={max_size_mb}, flush_size_kb={flush_size_kb}, folder_prefix={folder_prefix}, log_to_file={log_to_file}, merge_stdin={merge_stdin}",

@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: tee_stream.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 10:28:27 27-03-2026
+# LAST Modified: 10:46:20 27-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -160,13 +160,24 @@ class TeeStream:
         _file_inst: Optional[FileInstance] = None
         _prefix: Optional[CONST.Prefix] = None
         _mode: Optional[CONST.StdMode] = None
-        with self._file_lock:
-            if not self.file_instance:
+        # Use object.__getattribute__ to safely access lock and prevent recursion
+        try:
+            file_lock = object.__getattribute__(self, '_file_lock')
+            file_inst = object.__getattribute__(self, 'file_instance')
+            stream_mode = object.__getattribute__(self, 'stream_mode')
+        except AttributeError:
+            return ""
+
+        with file_lock:
+            if not file_inst:
                 return ""
-            _file_inst = self.file_instance
-            if not isinstance(self.stream_mode, CONST.StdMode):
+            _file_inst = file_inst
+            if not isinstance(stream_mode, CONST.StdMode):
                 return ""
-            _mode = self.stream_mode
+            _mode = stream_mode
+
+        if _file_inst is None:
+            return ""
 
         # Fast-path: if logging to file is disabled, skip prefix work.
         try:
@@ -214,9 +225,16 @@ class TeeStream:
                 _get_correct_prefix() to select the right prefix.
         """
         _file_instance: Optional[FileInstance] = None
-        with self._file_lock:
-            if self.file_instance:
-                _file_instance = self.file_instance
+        # Use object.__getattribute__ to safely access internal state and prevent recursion
+        try:
+            file_lock = object.__getattribute__(self, '_file_lock')
+            file_inst = object.__getattribute__(self, 'file_instance')
+        except AttributeError:
+            return
+
+        with file_lock:
+            if file_inst:
+                _file_instance = file_inst
         if not _file_instance:
             return
         try:
@@ -256,9 +274,12 @@ class TeeStream:
         Returns:
             The original TextIO stream passed at construction time.
         """
-        if self.original_stream is not None:
-            return self.original_stream
-        raise self.stream_not_present
+        # Use object.__getattribute__ to bypass __getattr__ and avoid
+        # infinite recursion when __getattr__ itself calls this method
+        stream = object.__getattribute__(self, 'original_stream')
+        if stream is not None:
+            return stream
+        raise object.__getattribute__(self, 'stream_not_present')
 
     def write(self, message: str) -> None:
         """Write message to the original stream and buffer it to the log file.
@@ -440,30 +461,45 @@ class TeeStream:
         during object teardown.
         """
 
+        # Use object.__getattribute__ to safely access state and prevent recursion
+        original_stream = None
+        try:
+            original_stream = object.__getattribute__(self, 'original_stream')
+            rogger = object.__getattribute__(self, 'rogger')
+            stream_mode = object.__getattribute__(self, 'stream_mode')
+        except AttributeError:
+            return
+
         # Flush the original stream first (best-effort)
         try:
-            self.rogger.log_debug(
-                f"Flushing TeeStream (mode={self.stream_mode})",
+            rogger.log_debug(
+                f"Flushing TeeStream (mode={stream_mode})",
                 stream=CONST.RAW_STDOUT
             )
         except (AttributeError, OSError, ValueError):
             pass
-        if not self.original_stream.closed:
+        if original_stream and not original_stream.closed:
             try:
-                self.original_stream.flush()
+                original_stream.flush()
             except OSError as exc:
                 try:
                     err_msg = f"{CONST.MODULE_NAME} I/O error flushing original stream: {exc}"
-                    self.rogger.log_error(err_msg, stream=CONST.RAW_STDERR)
+                    rogger.log_error(err_msg, stream=CONST.RAW_STDERR)
                     sys.stderr.write(f"{err_msg}")
                 except OSError:
                     pass
 
         _file_instance: Optional[FileInstance] = None
         # Snapshot the file instance under lock
-        with self._file_lock:
-            if self.file_instance:
-                _file_instance = self.file_instance
+        try:
+            file_lock = object.__getattribute__(self, '_file_lock')
+            file_inst = object.__getattribute__(self, 'file_instance')
+        except AttributeError:
+            return
+
+        with file_lock:
+            if file_inst:
+                _file_instance = file_inst
 
         if _file_instance:
             try:
