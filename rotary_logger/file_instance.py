@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: file_instance.py
 # CREATION DATE: 30-10-2025
-# LAST Modified: 23:22:16 26-03-2026
+# LAST Modified: 10:18:3 27-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -125,7 +125,7 @@ class FileInstance:
         try:
             self.rogger.log_success(
                 f"Initialized FileInstance with file_path={file_path}, override={override}, merged={merged}, encoding={encoding}, prefix={prefix}, max_size_mb={max_size_mb}, flush_size_kb={flush_size_kb}, folder_prefix={folder_prefix}, log_to_file={log_to_file}, merge_stdin={merge_stdin}",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
         except (AttributeError, OSError, ValueError):
             pass
@@ -166,7 +166,7 @@ class FileInstance:
                 try:
                     self.rogger.log_info(
                         f"set_log_to_file -> {log_to_file}",
-                        stream=sys.stdout
+                        stream=CONST.RAW_STDOUT
                     )
                 except (AttributeError, OSError, ValueError):
                     pass
@@ -175,7 +175,7 @@ class FileInstance:
         try:
             self.rogger.log_info(
                 f"set_log_to_file -> {log_to_file}",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
         except (AttributeError, OSError, ValueError):
             pass
@@ -198,7 +198,7 @@ class FileInstance:
                 try:
                     self.rogger.log_debug(
                         f"set_max_size -> {max_size_mb}MB",
-                        stream=sys.stdout
+                        stream=CONST.RAW_STDOUT
                     )
                 except (AttributeError, OSError, ValueError):
                     pass
@@ -207,7 +207,7 @@ class FileInstance:
         try:
             self.rogger.log_debug(
                 f"set_max_size -> {max_size_mb}MB",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
         except (AttributeError, OSError, ValueError):
             pass
@@ -238,7 +238,7 @@ class FileInstance:
                 try:
                     self.rogger.log_debug(
                         f"set_flush_size -> {flush_size}KB",
-                        stream=sys.stdout
+                        stream=CONST.RAW_STDOUT
                     )
                 except (AttributeError, OSError, ValueError):
                     pass
@@ -247,7 +247,7 @@ class FileInstance:
         try:
             self.rogger.log_debug(
                 f"set_flush_size -> {flush_size}KB",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
         except (AttributeError, OSError, ValueError):
             pass
@@ -266,7 +266,7 @@ class FileInstance:
                 try:
                     self.rogger.log_info(
                         f"set_merged -> {bool(merged)}",
-                        stream=sys.stdout
+                        stream=CONST.RAW_STDOUT
                     )
                 except (AttributeError, OSError, ValueError):
                     pass
@@ -275,7 +275,7 @@ class FileInstance:
         try:
             self.rogger.log_info(
                 f"set_merged -> {bool(merged)}",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
         except (AttributeError, OSError, ValueError):
             pass
@@ -299,7 +299,7 @@ class FileInstance:
                 try:
                     self.rogger.log_info(
                         f"set_merge_stdin -> {bool(merge_stdin)}",
-                        stream=sys.stdout
+                        stream=CONST.RAW_STDOUT
                     )
                 except (AttributeError, OSError, ValueError):
                     pass
@@ -308,7 +308,7 @@ class FileInstance:
         try:
             self.rogger.log_info(
                 f"set_merge_stdin -> {bool(merge_stdin)}",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
         except (AttributeError, OSError, ValueError):
             pass
@@ -328,7 +328,7 @@ class FileInstance:
                 try:
                     self.rogger.log_info(
                         f"set_encoding -> {encoding}",
-                        stream=sys.stdout
+                        stream=CONST.RAW_STDOUT
                     )
                 except (AttributeError, OSError, ValueError):
                     pass
@@ -337,7 +337,7 @@ class FileInstance:
         try:
             self.rogger.log_info(
                 f"set_encoding -> {encoding}",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
         except (AttributeError, OSError, ValueError):
             pass
@@ -355,14 +355,17 @@ class FileInstance:
                 try:
                     self.rogger.log_debug(
                         f"set_prefix -> {prefix}",
-                        stream=sys.stdout
+                        stream=CONST.RAW_STDOUT
                     )
                 except (AttributeError, OSError, ValueError):
                     pass
                 return
         self._set_prefix(prefix)
         try:
-            self.rogger.log_debug(f"set_prefix -> {prefix}", stream=sys.stdout)
+            self.rogger.log_debug(
+                f"set_prefix -> {prefix}",
+                stream=CONST.RAW_STDOUT
+            )
         except (AttributeError, OSError, ValueError):
             pass
         return
@@ -384,7 +387,7 @@ class FileInstance:
                 try:
                     self.rogger.log_info(
                         f"set_override -> {bool(override)}",
-                        stream=sys.stdout
+                        stream=CONST.RAW_STDOUT
                     )
                 except (AttributeError, OSError, ValueError):
                     pass
@@ -393,7 +396,7 @@ class FileInstance:
         try:
             self.rogger.log_info(
                 f"set_override -> {bool(override)}",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
         except (AttributeError, OSError, ValueError):
             pass
@@ -415,7 +418,7 @@ class FileInstance:
                     try:
                         self.rogger.log_info(
                             "set_filepath -> cleared file_path",
-                            stream=sys.stdout
+                            stream=CONST.RAW_STDOUT
                         )
                     except (AttributeError, OSError, ValueError):
                         pass
@@ -425,7 +428,7 @@ class FileInstance:
             try:
                 self.rogger.log_info(
                     "set_filepath -> cleared file_path",
-                    stream=sys.stdout
+                    stream=CONST.RAW_STDOUT
                 )
             except (AttributeError, OSError, ValueError):
                 pass
@@ -436,7 +439,7 @@ class FileInstance:
                 try:
                     self.rogger.log_info(
                         f"set_filepath -> set to {file_path}",
-                        stream=sys.stdout
+                        stream=CONST.RAW_STDOUT
                     )
                 except (AttributeError, OSError, ValueError):
                     pass
@@ -445,7 +448,7 @@ class FileInstance:
         try:
             self.rogger.log_info(
                 f"set_filepath -> set to {file_path}",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
         except (AttributeError, OSError, ValueError):
             pass
@@ -549,10 +552,19 @@ class FileInstance:
                 mode: str = self.get_mode(lock=False).lower()
                 if mode in _value:
                     return _value[mode]
+                self.rogger.log_error(
+                    "Unsupported mode",
+                    stream=CONST.RAW_STDERR
+                )
+
                 raise ValueError("Unsupported mode")
         mode: str = self.get_mode(lock=False).lower()
         if mode in _value:
             return _value[mode]
+        self.rogger.log_error(
+            "Unsupported mode",
+            stream=CONST.RAW_STDERR
+        )
         raise ValueError("Unsupported mode")
 
     def get_filepath(self, *, lock: bool = True) -> Optional[CONST.FileInfo]:
@@ -628,11 +640,15 @@ class FileInstance:
         try:
             self.rogger.log_debug(
                 f"write: appended {len(message)} chars, should_flush={should}",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
         except (AttributeError, OSError, ValueError):
             pass
         if should:
+            self.rogger.log_debug(
+                "Flushing buffer",
+                stream=CONST.RAW_STDOUT
+            )
             self._flush_buffer()
 
     def flush(self):
@@ -645,7 +661,7 @@ class FileInstance:
         try:
             self.rogger.log_debug(
                 "flush: manual flush requested",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
         except (AttributeError, OSError, ValueError):
             pass
@@ -661,12 +677,24 @@ class FileInstance:
         """
         if not prefix:
             self.prefix = None
+            self.rogger.log_debug(
+                "Prefixes set to None",
+                stream=CONST.RAW_STDOUT
+            )
             return
         # internal setter assumes caller handles locking
+        self.rogger.log_debug(
+            "Setting prefixes",
+            stream=CONST.RAW_STDOUT
+        )
         self.prefix = CONST.Prefix()
         self.prefix.std_in = prefix.std_in
         self.prefix.std_out = prefix.std_out
         self.prefix.std_err = prefix.std_err
+        self.rogger.log_debug(
+            f"Prefixes set: {self.prefix}",
+            stream=CONST.RAW_STDOUT
+        )
 
     def _set_folder_prefix(self, folder_prefix: Optional[CONST.StdMode]) -> None:
         """Configure the per-stream folder prefix.
@@ -677,6 +705,10 @@ class FileInstance:
         """
         if folder_prefix and folder_prefix in CONST.CORRECT_FOLDER:
             self.folder_prefix = folder_prefix
+            self.rogger.log_debug(
+                f"Folder prefix: {self.folder_prefix}",
+                stream=CONST.RAW_STDOUT
+            )
             return
         self.folder_prefix = None
 
@@ -928,6 +960,10 @@ class FileInstance:
         if _should_create:
             day_dir.mkdir(parents=True, exist_ok=True)
         filename = self._get_filename()
+        self.rogger.log_debug(
+            f"Determined file name: {filename}, determined file path: {day_dir}",
+            stream=CONST.RAW_STDOUT
+        )
         return day_dir / filename
 
     def _looks_like_directory(self, dir_path: Path) -> bool:
@@ -954,7 +990,13 @@ class FileInstance:
 
         # If the parent exists and is writable, assume it *could* be a directory
         str_path: str = str(dir_path)
-        return str_path.endswith(os.sep) or str_path.endswith("/") or str_path.endswith("\\")
+        looks_like_it = str_path.endswith(os.sep) or str_path.endswith(
+            "/") or str_path.endswith("\\")
+        self.rogger.log_debug(
+            f"Looks_like_it: {looks_like_it}",
+            stream=CONST.RAW_STDOUT
+        )
+        return looks_like_it
 
     def _open_file(self, file_path: Path) -> CONST.FileInfo:
         """Open or create the log file at `file_path` and return a populated `FileInfo`.
@@ -985,6 +1027,10 @@ class FileInstance:
 
         descriptor = None
         if should_open:
+            self.rogger.log_debug(
+                "File is not open, attempting to open",
+                stream=CONST.RAW_STDOUT
+            )
             try:
                 descriptor = open(
                     _node.path,
@@ -993,6 +1039,10 @@ class FileInstance:
                     newline="\n"
                 )
             except (OSError, ValueError):
+                self.rogger.log_error(
+                    f"Failed to open file: {_node.path}",
+                    stream=CONST.RAW_STDERR
+                )
                 # Opening failed; keep descriptor as None. Caller will handle.
                 descriptor = None
 
@@ -1003,6 +1053,10 @@ class FileInstance:
             _node.written_bytes = file_path.stat().st_size
         else:
             _node.written_bytes = 0
+        self.rogger.log_debug(
+            f"Written bytes: {_node.written_bytes}",
+            stream=CONST.RAW_STDOUT
+        )
         return _node
 
     def _close_file_inner(self) -> bool:
@@ -1014,6 +1068,10 @@ class FileInstance:
         because this is a best-effort operation.
         """
         if self.file:
+            self.rogger.log_debug(
+                "File is open, closing",
+                stream=CONST.RAW_STDOUT
+            )
             descriptor = getattr(self.file, "descriptor", None)
             if descriptor:
                 try:
@@ -1069,6 +1127,7 @@ class FileInstance:
         # lock, then perform I/O outside the lock. If the file descriptor is
         # missing, perform the open outside the lock as well to avoid blocking
         # other callers.
+        self.rogger.log_debug("Flushing buffer", stream=CONST.RAW_STDOUT)
         with self._file_lock:
             if not self._buffer:
                 return
@@ -1096,7 +1155,7 @@ class FileInstance:
             try:
                 self.rogger.log_debug(
                     f"_flush_buffer: needs_open=True, to_write_lines={len(to_write)}",
-                    stream=sys.stdout
+                    stream=CONST.RAW_STDOUT
                 )
             except (AttributeError, OSError, ValueError):
                 pass
@@ -1111,7 +1170,7 @@ class FileInstance:
         try:
             self.rogger.log_debug(
                 f"_flush_buffer: performing write, lines={len(to_write)}",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
         except (AttributeError, OSError, ValueError):
             pass
@@ -1127,7 +1186,7 @@ class FileInstance:
             try:
                 self.rogger.log_warning(
                     "_flush_buffer: write failed, attempting reopen",
-                    stream=sys.stderr
+                    stream=CONST.RAW_STDERR
                 )
             except (AttributeError, OSError, ValueError):
                 pass
@@ -1148,12 +1207,11 @@ class FileInstance:
                     try:
                         self.rogger.log_error(
                             "_flush_buffer: retry write failed, giving up on this flush",
-                            stream=sys.stderr
+                            stream=CONST.RAW_STDERR
                         )
                     except (AttributeError, OSError, ValueError):
+                        # give up on this flush attempt
                         pass
-                    # give up on this flush attempt
-                    pass
         else:
             try:
                 # account bytes written for logging purposes
@@ -1165,7 +1223,7 @@ class FileInstance:
                         _bytes += len(line.encode('utf-8'))
                 self.rogger.log_debug(
                     f"_flush_buffer: write successful, approx_bytes={_bytes}",
-                    stream=sys.stdout
+                    stream=CONST.RAW_STDOUT
                 )
             except (AttributeError, OSError, ValueError):
                 pass

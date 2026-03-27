@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: rotary_logger.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 5:11:39 27-03-2026
+# LAST Modified: 9:36:49 27-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -525,56 +525,57 @@ class RotaryLogger:
             if skip_redirect_check_stdin:
                 self.rogger.log_warning(
                     "Skipping redirect check for stdin because 'skip_redirect_check_stdin' is True",
-                    stream=sys.stderr
+                    stream=CONST.RAW_STDERR
                 )
             if not skip_redirect_check_stdin and isinstance(sys.stdin, TeeStream):
                 self.rogger.log_warning(
                     "Stdin stream is already being redirected, skipping redirection",
-                    stream=sys.stderr
+                    stream=CONST.RAW_STDERR
                 )
                 _stdin_stream = sys.stdin
             else:
                 self.rogger.log_info(
                     "Stdin is not yet being redirected, redirecting",
-                    stream=sys.stdout
+                    stream=CONST.RAW_STDOUT
                 )
                 self.rogger.log_debug(
                     f"(stdin) Log to file: {log_to_file}"
                 )
                 _stdin_stream = TeeStream(
                     self._file_stream_instances.stdin,
-                    sys.stdin,
+                    CONST.MIM_STDIN,
                     mode=CONST.StdMode.STDIN,
                     log_to_file=log_to_file,
                     log_function_calls=self.log_function_calls_stdin
                 )
                 self.rogger.log_debug(
                     "Constructed TeeStream for stdin",
-                    stream=sys.stdout
+                    stream=CONST.RAW_STDOUT
                 )
         if self._file_stream_instances.stdout:
             if skip_redirect_check_stdout:
                 self.rogger.log_warning(
                     "Skipping redirect check for stdout because 'skip_redirect_check_stdin' is True",
-                    stream=sys.stderr
+                    stream=CONST.RAW_STDERR
                 )
             if not skip_redirect_check_stdout and isinstance(sys.stdout, TeeStream):
                 self.rogger.log_warning(
                     "Stdout stream is already being redirected, skipping redirection",
-                    stream=sys.stderr
+                    stream=CONST.RAW_STDERR
                 )
                 _stdin_stream = sys.stdout
             else:
                 self.rogger.log_info(
                     "Stdout is not yet being redirected, redirecting",
-                    stream=sys.stdout
+                    stream=CONST.RAW_STDOUT
                 )
                 self.rogger.log_debug(
-                    f"(stdout) Log to file: {log_to_file}"
+                    f"(stdout) Log to file: {log_to_file}",
+                    stream=CONST.RAW_STDOUT
                 )
                 _stdout_stream = TeeStream(
                     self._file_stream_instances.stdout,
-                    sys.stdout,
+                    CONST.MIM_STDOUT,
                     mode=CONST.StdMode.STDOUT,
                     log_to_file=log_to_file,
                     log_function_calls=self.log_function_calls_stdout
@@ -587,39 +588,40 @@ class RotaryLogger:
             if skip_redirect_check_stderr:
                 self.rogger.log_warning(
                     "Skipping redirect check for stderr because 'skip_redirect_check_stderr' is True",
-                    stream=sys.stderr
+                    stream=CONST.RAW_STDERR
                 )
             if not skip_redirect_check_stderr and isinstance(sys.stderr, TeeStream):
                 self.rogger.log_warning(
                     "Stderr stream is already being redirected, skipping redirection",
-                    stream=sys.stderr
+                    stream=CONST.RAW_STDERR
                 )
                 _stderr_stream = sys.stderr
             else:
                 self.rogger.log_info(
                     "Stderr is not yet being redirected, redirecting",
-                    stream=sys.stdout
+                    stream=CONST.RAW_STDOUT
                 )
                 self.rogger.log_debug(
                     f"(stderr) Log to file: {log_to_file}"
                 )
                 _stderr_stream = TeeStream(
                     self._file_stream_instances.stderr,
-                    sys.stderr,
+                    CONST.MIM_STDERR,
                     mode=CONST.StdMode.STDERR,
                     log_to_file=log_to_file,
                     log_function_calls=self.log_function_calls_stderr
                 )
                 self.rogger.log_debug(
                     "Constructed TeeStream for stderr",
-                    stream=sys.stdout
+                    stream=CONST.RAW_STDOUT
                 )
 
         with self._file_lock:
-            self.rogger.log_info("redirecting streams", stream=sys.stdout)
+            self.rogger.log_info("redirecting streams",
+                                 stream=CONST.RAW_STDOUT)
             self.rogger.log_debug(
                 f"Will assign streams: stdin={bool(_stdin_stream)}, stdout={bool(_stdout_stream)}, stderr={bool(_stderr_stream)}",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
             if _stdin_stream:
                 sys.stdin = _stdin_stream
@@ -652,7 +654,7 @@ class RotaryLogger:
                 else:
                     self.rogger.log_info(
                         "Registered atexit flush handlers",
-                        stream=sys.stdout
+                        stream=CONST.RAW_STDOUT
                     )
 
     def _resume_logging_locked(self, to_flush: List[TeeStream]) -> None:
@@ -670,7 +672,7 @@ class RotaryLogger:
         self.paused = False
         self.rogger.log_info(
             "Resuming logging (reinstalling TeeStream wrappers)",
-            stream=sys.stdout
+            stream=CONST.RAW_STDOUT
         )
         out = self.stdout_stream
         err = self.stderr_stream
@@ -686,7 +688,9 @@ class RotaryLogger:
             sys.stdin = inn
             to_flush.append(inn)
             self.rogger.log_debug(
-                "Reinstalled stdin TeeStream", stream=sys.stdout)
+                "Reinstalled stdin TeeStream",
+                stream=CONST.RAW_STDOUT
+            )
 
     def _pause_logging_locked(self, to_flush: List[TeeStream]) -> None:
         """Replace TeeStream wrappers with the original standard streams.
@@ -703,7 +707,7 @@ class RotaryLogger:
         self.paused = True
         self.rogger.log_info(
             "Pausing logging (restoring original streams)",
-            stream=sys.stdout
+            stream=CONST.RAW_STDOUT
         )
         out = self.stdout_stream
         err = self.stderr_stream
@@ -714,17 +718,21 @@ class RotaryLogger:
             to_flush.append(out)
             self.rogger.log_debug(
                 "Uninstalled stdout TeeStream",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
         if err is not None:
             sys.stderr = err.original_stream
             to_flush.append(err)
+            self.rogger.log_debug(
+                "Uninstalled stderr TeeStream",
+                stream=CONST.RAW_STDOUT
+            )
         if inn is not None:
             sys.stdin = inn.original_stream
             to_flush.append(inn)
             self.rogger.log_debug(
                 "Uninstalled stdin TeeStream",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
 
     def _flush_streams(self, to_flush: List[TeeStream]) -> None:
@@ -742,17 +750,17 @@ class RotaryLogger:
             try:
                 self.rogger.log_debug(
                     f"Flushing stream: {getattr(s, 'mode', 'unknown')}",
-                    stream=sys.stdout
+                    stream=CONST.RAW_STDOUT
                 )
                 s.flush()
                 self.rogger.log_debug(
                     f"Flushed stream: {getattr(s, 'mode', 'unknown')}",
-                    stream=sys.stdout
+                    stream=CONST.RAW_STDOUT
                 )
             except (OSError, ValueError) as e:
                 self.rogger.log_warning(
                     f"Ignored flush error for stream: {getattr(s, 'mode', 'unknown')} -> {e}",
-                    stream=sys.stderr
+                    stream=CONST.RAW_STDERR
                 )
 
     def pause_logging(self, *, toggle: bool = True) -> bool:
@@ -777,13 +785,13 @@ class RotaryLogger:
             if toggle is True and self.paused is True:
                 self.rogger.log_debug(
                     "pause_logging: toggle requested and currently paused -> resume",
-                    stream=sys.stdout
+                    stream=CONST.RAW_STDOUT
                 )
                 self._resume_logging_locked(to_flush)
             else:
                 self.rogger.log_debug(
                     "pause_logging: pausing or toggling into pause",
-                    stream=sys.stdout
+                    stream=CONST.RAW_STDOUT
                 )
                 self._pause_logging_locked(to_flush)
             _paused = self.paused
@@ -808,13 +816,13 @@ class RotaryLogger:
             if toggle is True and self.paused is False:
                 self.rogger.log_debug(
                     "resume_logging: toggle requested and currently running -> pause",
-                    stream=sys.stdout
+                    stream=CONST.RAW_STDOUT
                 )
                 self._pause_logging_locked(to_flush)
             else:
                 self.rogger.log_debug(
                     "resume_logging: resuming logging",
-                    stream=sys.stdout
+                    stream=CONST.RAW_STDOUT
                 )
                 self._resume_logging_locked(to_flush)
             _paused = self.paused
@@ -908,20 +916,20 @@ class RotaryLogger:
                 self._atexit_registered = False
                 self.rogger.log_info(
                     "Unregistered atexit flush handlers",
-                    stream=sys.stdout
+                    stream=CONST.RAW_STDOUT
                 )
 
         for s in to_flush:
             try:
                 self.rogger.log_debug(
                     f"stop_logging: flushing stream {getattr(s, 'mode', 'unknown')}",
-                    stream=sys.stdout
+                    stream=CONST.RAW_STDOUT
                 )
                 s.flush()
             except (OSError, ValueError):
                 self.rogger.log_warning(
                     f"stop_logging: ignored flush error for {getattr(s, 'mode', 'unknown')}",
-                    stream=sys.stderr
+                    stream=CONST.RAW_STDERR
                 )
 
 

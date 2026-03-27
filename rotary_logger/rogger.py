@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: rogger.py
 # CREATION DATE: 18-03-2026
-# LAST Modified: 23:13:3 26-03-2026
+# LAST Modified: 9:20:42 27-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -36,8 +36,9 @@ import sys
 import inspect
 from threading import RLock
 from datetime import datetime
+from io import TextIOWrapper
 from typing import Optional, TextIO, Union, TYPE_CHECKING
-from .constants import MODULE_NAME, LogToggle
+from .constants import MODULE_NAME, LogToggle, RAW_STDOUT, RAW_STDERR
 
 if TYPE_CHECKING:
     from .tee_stream import TeeStream
@@ -259,7 +260,7 @@ class Rogger:
         except Exception:
             return None
 
-    def _log_if_possible(self, log_type: str, message: str, function_name: Optional[str], class_name: Optional[str], stream: Union[TextIO, "TeeStream"]) -> None:
+    def _log_if_possible(self, log_type: str, message: str, function_name: Optional[str], class_name: Optional[str], stream: Union[Optional[TextIOWrapper], TextIO, "TeeStream"]) -> None:
         """The generic function to log the message to the provided stream
 
         Args:
@@ -275,16 +276,18 @@ class Rogger:
         date = self._get_date()
         final_msg = f"[{date}] {self.program_name} {log_type} ({class_name}.{function_name}): {message}\n"
         with self._function_lock:
+            if stream is None:
+                return
             stream.write(final_msg)
 
-    def log_success(self, message: str, *, function_name: Optional[str] = None, class_name: Optional[str] = None, stream: Union[TextIO, "TeeStream"] = sys.stdout) -> None:
+    def log_success(self, message: str, *, function_name: Optional[str] = None, class_name: Optional[str] = None, stream: Union[Optional[TextIOWrapper], TextIO, "TeeStream"] = RAW_STDOUT) -> None:
         """Log a success message to the stream (if logging conditions are met)
 
         Args:
             message (str): The message to display
             function_name (Optional[str], optional): The name of the function calling it. Defaults to None.
             class_name (Optional[str], optional): The name of the class calling it. Defaults to None.
-            stream (Union[TextIO, TeeStream], optional): The stream to write to. Defaults to sys.stdout.
+            stream (Union[TextIO, TeeStream], optional): The stream to write to. Defaults to RAW_STDOUT.
         """
         if self.toggles.success is False:
             return
@@ -300,14 +303,14 @@ class Rogger:
             stream=stream
         )
 
-    def log_info(self, message: str, *, function_name: Optional[str] = None, class_name: Optional[str] = None, stream: Union[TextIO, "TeeStream"] = sys.stdout) -> None:
+    def log_info(self, message: str, *, function_name: Optional[str] = None, class_name: Optional[str] = None, stream: Union[Optional[TextIOWrapper], TextIO, "TeeStream"] = RAW_STDOUT) -> None:
         """Log a info message to the stream (if logging conditions are met)
 
         Args:
             message (str): The message to display
             function_name (Optional[str], optional): The name of the function calling it. Defaults to None.
             class_name (Optional[str], optional): The name of the class calling it. Defaults to None.
-            stream (Union[TextIO, TeeStream], optional): The stream to write to. Defaults to sys.stdout.
+            stream (Union[TextIO, TeeStream], optional): The stream to write to. Defaults to RAW_STDOUT.
         """
         if self.toggles.info is False:
             return
@@ -323,14 +326,14 @@ class Rogger:
             stream=stream
         )
 
-    def log_warning(self, message: str, *, function_name: Optional[str] = None, class_name: Optional[str] = None, stream: Union[TextIO, "TeeStream"] = sys.stderr) -> None:
+    def log_warning(self, message: str, *, function_name: Optional[str] = None, class_name: Optional[str] = None, stream: Union[Optional[TextIOWrapper], TextIO, "TeeStream"] = RAW_STDERR) -> None:
         """Log a warning message to the stream (if logging conditions are met)
 
         Args:
             message (str): The message to display
             function_name (Optional[str], optional): The name of the function calling it. Defaults to None.
             class_name (Optional[str], optional): The name of the class calling it. Defaults to None.
-            stream (Union[TextIO, TeeStream], optional): The stream to write to. Defaults to sys.stderr.
+            stream (Union[TextIO, TeeStream], optional): The stream to write to. Defaults to RAW_STDERR.
         """
         if self.toggles.warning is False:
             return
@@ -346,14 +349,14 @@ class Rogger:
             stream=stream
         )
 
-    def log_error(self, message: str, *, function_name: Optional[str] = None, class_name: Optional[str] = None, stream: Union[TextIO, "TeeStream"] = sys.stderr) -> None:
+    def log_error(self, message: str, *, function_name: Optional[str] = None, class_name: Optional[str] = None, stream: Union[Optional[TextIOWrapper], TextIO, "TeeStream"] = RAW_STDERR) -> None:
         """Log an error message to the stream (if logging conditions are met)
 
         Args:
             message (str): The message to display
             function_name (Optional[str], optional): The name of the function calling it. Defaults to None.
             class_name (Optional[str], optional): The name of the class calling it. Defaults to None.
-            stream (Union[TextIO, TeeStream], optional): The stream to write to. Defaults to sys.stderr.
+            stream (Union[TextIO, TeeStream], optional): The stream to write to. Defaults to RAW_STDERR.
         """
         if self.toggles.error is False:
             return
@@ -369,14 +372,14 @@ class Rogger:
             stream=stream
         )
 
-    def log_critical(self, message: str, *, function_name: Optional[str] = None, class_name: Optional[str] = None, stream: Union[TextIO, "TeeStream"] = sys.stderr) -> None:
+    def log_critical(self, message: str, *, function_name: Optional[str] = None, class_name: Optional[str] = None, stream: Union[Optional[TextIOWrapper], TextIO, "TeeStream"] = RAW_STDERR) -> None:
         """Log a critical message to the stream (if logging conditions are met)
 
         Args:
             message (str): The message to display
             function_name (Optional[str], optional): The name of the function calling it. Defaults to None.
             class_name (Optional[str], optional): The name of the class calling it. Defaults to None.
-            stream (Union[TextIO, TeeStream], optional): The stream to write to. Defaults to sys.stderr.
+            stream (Union[TextIO, TeeStream], optional): The stream to write to. Defaults to RAW_STDERR.
         """
         if self.toggles.critical is False:
             return
@@ -392,14 +395,14 @@ class Rogger:
             stream=stream
         )
 
-    def log_debug(self, message: str, *, function_name: Optional[str] = None, class_name: Optional[str] = None, stream: Union[TextIO, "TeeStream"] = sys.stdout) -> None:
+    def log_debug(self, message: str, *, function_name: Optional[str] = None, class_name: Optional[str] = None, stream: Union[Optional[TextIOWrapper], TextIO, "TeeStream"] = RAW_STDOUT) -> None:
         """Log a debug message to the stream (if logging conditions are met)
 
         Args:
             message (str): The message to display
             function_name (Optional[str], optional): The name of the function calling it. Defaults to None.
             class_name (Optional[str], optional): The name of the class calling it. Defaults to None.
-            stream (Union[TextIO, TeeStream], optional): The stream to write to. Defaults to sys.stdout.
+            stream (Union[TextIO, TeeStream], optional): The stream to write to. Defaults to RAW_STDOUT.
         """
         if self.toggles.debug is False:
             return

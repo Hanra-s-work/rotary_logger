@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: tee_stream.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 23:18:32 26-03-2026
+# LAST Modified: 10:28:27 27-03-2026
 # DESCRIPTION:
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -120,7 +120,7 @@ class TeeStream:
         try:
             self.rogger.log_debug(
                 f"TeeStream initialized (mode={self.stream_mode}, log_to_file={log_to_file})",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
         except (AttributeError, OSError, ValueError):
             # Never allow logging to break stream setup
@@ -237,9 +237,9 @@ class TeeStream:
                 _file_instance.write(f"{_prefix}{data}")
         except (OSError, ValueError):
             try:
-                sys.stderr.write(
-                    f"{CONST.MODULE_NAME} Error writing to log file\n"
-                )
+                err_msg = f"{CONST.MODULE_NAME} Error writing to log file"
+                self.rogger.log_error(err_msg, stream=CONST.RAW_STDERR)
+                sys.stderr.write(f"{err_msg}\n")
             except OSError:
                 pass
 
@@ -281,15 +281,19 @@ class TeeStream:
                 sys.exit(CONST.ERROR)
             elif self.error_mode in (CONST.ErrorMode.WARN, CONST.ErrorMode.WARN_NO_PIPE):
                 try:
-                    sys.stderr.write(CONST.BROKEN_PIPE_ERROR)
+                    self.rogger.log_error(
+                        CONST.BROKEN_PIPE_ERROR,
+                        stream=CONST.RAW_STDERR
+                    )
+                    sys.stderr.write(f"{CONST.BROKEN_PIPE_ERROR}\n")
                 except OSError:
                     pass
         except OSError as exc:
             # Unexpected I/O error writing to original stream: report and continue
             try:
-                sys.stderr.write(
-                    f"{CONST.MODULE_NAME} I/O error writing to original stream: {exc}\n"
-                )
+                err_msg = f"{CONST.MODULE_NAME} I/O error writing to original stream: {exc}"
+                self.rogger.log_error(err_msg, stream=CONST.RAW_STDERR)
+                sys.stderr.write(f"{err_msg}\n")
             except OSError:
                 # swallow any errors writing to stderr during shutdown
                 pass
@@ -299,7 +303,7 @@ class TeeStream:
             # Debug log about the write operation (non-intrusive)
             self.rogger.log_debug(
                 f"write: forwarded {len(_tmp_message)} chars to original stream (mode={self.stream_mode})",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
         except (AttributeError, OSError, ValueError):
             pass
@@ -324,15 +328,19 @@ class TeeStream:
                 sys.exit(CONST.ERROR)
             elif self.error_mode in (CONST.ErrorMode.WARN, CONST.ErrorMode.WARN_NO_PIPE):
                 try:
-                    sys.stderr.write(CONST.BROKEN_PIPE_ERROR)
+                    self.rogger.log_error(
+                        CONST.BROKEN_PIPE_ERROR,
+                        stream=CONST.RAW_STDERR
+                    )
+                    sys.stderr.write(f"{CONST.BROKEN_PIPE_ERROR}\n")
                 except OSError:
                     pass
         except OSError as exc:
             # Unexpected I/O error writing to original stream: report and continue
             try:
-                sys.stderr.writelines(
-                    f"{CONST.MODULE_NAME} I/O error writing to original stream: {exc}\n"
-                )
+                err_msg = f"{CONST.MODULE_NAME} I/O error writing to original stream: {exc}"
+                self.rogger.log_error(err_msg, stream=CONST.RAW_STDERR)
+                sys.stderr.writelines(f"{err_msg}\n")
             except OSError:
                 # swallow any errors writing to stderr during shutdown
                 pass
@@ -343,7 +351,7 @@ class TeeStream:
                 total += len(l)
             self.rogger.log_debug(
                 f"writelines: forwarded {total} chars across {len(_tmp_message)} items (mode={self.stream_mode})",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
         except (AttributeError, OSError, ValueError):
             pass
@@ -367,7 +375,7 @@ class TeeStream:
         try:
             self.rogger.log_debug(
                 f"read: read {len(data)} chars from original stream (mode={self.stream_mode})",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
         except (AttributeError, OSError, ValueError):
             pass
@@ -390,7 +398,7 @@ class TeeStream:
         try:
             self.rogger.log_debug(
                 f"readline: read {len(data)} chars from original stream (mode={self.stream_mode})",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
         except (AttributeError, OSError, ValueError):
             pass
@@ -416,7 +424,7 @@ class TeeStream:
                 total += len(d)
             self.rogger.log_debug(
                 f"readlines: read {len(data)} lines, {total} chars (mode={self.stream_mode})",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
         except (AttributeError, OSError, ValueError):
             pass
@@ -436,7 +444,7 @@ class TeeStream:
         try:
             self.rogger.log_debug(
                 f"Flushing TeeStream (mode={self.stream_mode})",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
         except (AttributeError, OSError, ValueError):
             pass
@@ -445,9 +453,9 @@ class TeeStream:
                 self.original_stream.flush()
             except OSError as exc:
                 try:
-                    sys.stderr.write(
-                        f"{CONST.MODULE_NAME} I/O error flushing original stream: {exc}\n"
-                    )
+                    err_msg = f"{CONST.MODULE_NAME} I/O error flushing original stream: {exc}"
+                    self.rogger.log_error(err_msg, stream=CONST.RAW_STDERR)
+                    sys.stderr.write(f"{err_msg}")
                 except OSError:
                     pass
 
@@ -478,7 +486,7 @@ class TeeStream:
                 try:
                     self.rogger.log_debug(
                         f"Flushed file_instance for mode={self.stream_mode}",
-                        stream=sys.stdout
+                        stream=CONST.RAW_STDOUT
                     )
                 except (AttributeError, OSError, ValueError):
                     pass
@@ -486,7 +494,7 @@ class TeeStream:
                 try:
                     self.rogger.log_warning(
                         f"TeeStream flush encountered I/O error for mode={self.stream_mode}",
-                        stream=sys.stderr
+                        stream=CONST.RAW_STDERR
                     )
                 except (AttributeError, OSError, ValueError):
                     pass
@@ -518,6 +526,7 @@ class TeeStream:
             True if the wrapped stream has been closed, False otherwise.
         """
         data = self._get_stream_if_present().closed
+        self.rogger.log_debug(f"Closed: {data}", stream=CONST.RAW_STDOUT)
         return data
 
     @property
@@ -531,6 +540,7 @@ class TeeStream:
             The error-handling mode string (e.g. 'strict'), or None.
         """
         data = self._get_stream_if_present().errors
+        self.rogger.log_debug(f"Errors: {data}", stream=CONST.RAW_STDOUT)
         return data
 
     @property
@@ -544,6 +554,7 @@ class TeeStream:
             The encoding string (e.g. 'utf-8').
         """
         data = self._get_stream_if_present().encoding
+        self.rogger.log_debug(f"Encoding: {data}", stream=CONST.RAW_STDOUT)
         return data
 
     @property
@@ -557,6 +568,10 @@ class TeeStream:
             Non-zero if line buffering is active, zero otherwise.
         """
         data = self._get_stream_if_present().line_buffering
+        self.rogger.log_debug(
+            f"Line buffering: {data}",
+            stream=CONST.RAW_STDOUT
+        )
         return data
 
     @property
@@ -570,6 +585,7 @@ class TeeStream:
             The mode string (e.g. 'w', 'r').
         """
         data = self._get_stream_if_present().mode
+        self.rogger.log_debug(f"Mode: {data}", stream=CONST.RAW_STDOUT)
         return data
 
     @property
@@ -584,6 +600,7 @@ class TeeStream:
             descriptor for standard streams.
         """
         data = self._get_stream_if_present().name
+        self.rogger.log_debug(f"Name: {data}", stream=CONST.RAW_STDOUT)
         return data
 
     @property
@@ -598,6 +615,7 @@ class TeeStream:
             io.TextIOBase.newlines attribute.
         """
         data = self._get_stream_if_present().newlines
+        self.rogger.log_debug(f"Newlines: {data}", stream=CONST.RAW_STDOUT)
         return data
 
     def close(self) -> None:
@@ -613,7 +631,7 @@ class TeeStream:
         try:
             self.rogger.log_info(
                 f"Closing TeeStream (mode={self.stream_mode})",
-                stream=sys.stdout
+                stream=CONST.RAW_STDOUT
             )
         except (AttributeError, OSError, ValueError):
             pass
@@ -631,6 +649,7 @@ class TeeStream:
             Integer file descriptor.
         """
         data = self._get_stream_if_present().fileno()
+        self.rogger.log_debug(f"Fileno: {data}", stream=CONST.RAW_STDOUT)
         return data
 
     def isatty(self) -> bool:
@@ -643,6 +662,7 @@ class TeeStream:
             True if the stream is interactive (TTY), False otherwise.
         """
         data = self._get_stream_if_present().isatty()
+        self.rogger.log_debug(f"IsATTY: {data}", stream=CONST.RAW_STDOUT)
         return data
 
     def readable(self) -> bool:
@@ -655,6 +675,7 @@ class TeeStream:
             True if the stream can be read from, False otherwise.
         """
         data = self._get_stream_if_present().readable()
+        self.rogger.log_debug(f"Readable: {data}", stream=CONST.RAW_STDOUT)
         return data
 
     def seek(self, offset: int, whence: int = 0) -> int:
@@ -673,6 +694,10 @@ class TeeStream:
             The new absolute stream position.
         """
         data = self._get_stream_if_present().seek(offset, whence)
+        self.rogger.log_debug(
+            f"Seek(offset={offset},whence={whence}): {data}",
+            stream=CONST.RAW_STDOUT
+        )
         return data
 
     def seekable(self) -> bool:
@@ -685,6 +710,7 @@ class TeeStream:
             True if the stream supports seek() and tell(), False otherwise.
         """
         data = self._get_stream_if_present().seekable()
+        self.rogger.log_debug(f"Seekable: {data}", stream=CONST.RAW_STDOUT)
         return data
 
     def tell(self) -> int:
@@ -697,6 +723,7 @@ class TeeStream:
             The current byte offset within the stream.
         """
         data = self._get_stream_if_present().tell()
+        self.rogger.log_debug(f"Tell: {data}", stream=CONST.RAW_STDOUT)
         return data
 
     def truncate(self, size: Optional[int] = None) -> int:
@@ -712,6 +739,10 @@ class TeeStream:
             The new file size in bytes.
         """
         data = self._get_stream_if_present().truncate(size)
+        self.rogger.log_debug(
+            f"Truncate(size={size}): {data}",
+            stream=CONST.RAW_STDOUT
+        )
         return data
 
     def writable(self) -> bool:
@@ -724,6 +755,7 @@ class TeeStream:
             True if the stream can be written to, False otherwise.
         """
         data = self._get_stream_if_present().writable()
+        self.rogger.log_debug(f"Writable: {data}", stream=CONST.RAW_STDOUT)
         return data
 
     def __enter__(self) -> TextIO:
@@ -760,6 +792,10 @@ class TeeStream:
             the exception, False or None propagates it.
         """
         data = self._get_stream_if_present().__exit__(exc_type, exc_val, exc_tb)
+        self.rogger.log_debug(
+            f"__exit__(exc_type={exc_type},exc_val={exc_val},exc_tb={exc_tb}): {data}",
+            stream=CONST.RAW_STDOUT
+        )
         return data
 
     def __iter__(self):

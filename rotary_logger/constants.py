@@ -22,7 +22,7 @@
 # PROJECT: rotary_logger
 # FILE: constants.py
 # CREATION DATE: 29-10-2025
-# LAST Modified: 4:48:9 19-03-2026
+# LAST Modified: 10:8:18 27-03-2026
 # DESCRIPTION: 
 # A module that provides a universal python light on iops way of logging to files your program execution.
 # /STOP
@@ -37,10 +37,19 @@ import sys
 from enum import Enum
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import IO, Optional, Dict, Any, TYPE_CHECKING
+from typing import IO, Optional, Dict, Any, Final, TYPE_CHECKING
+from io import TextIOWrapper
 
 if TYPE_CHECKING:
     from .rotary_logger_cls import FileInstance
+
+# Stream redirection
+MIM_STDOUT = sys.stdout
+MIM_STDERR = sys.stderr
+MIM_STDIN = sys.stdin
+sys.stdout = MIM_STDOUT
+sys.stdin = MIM_STDIN
+sys.stderr = MIM_STDERR
 
 IS_A_TTY: bool = sys.stdout.isatty()
 IS_PIPE: bool = not IS_A_TTY
@@ -148,7 +157,7 @@ class Prefix:
     std_err: bool = False
 
 
-BROKEN_PIPE_ERROR: str = f"{MODULE_NAME} Broken pipe on stdout\n"
+BROKEN_PIPE_ERROR: str = f"{MODULE_NAME} Broken pipe on stdout"
 
 PREFIX_STDOUT: str = "[STDOUT]"
 PREFIX_STDERR: str = "[STDERR]"
@@ -230,3 +239,8 @@ class LogToggle:
     error: bool = True
     critical: bool = True
     debug: bool = True
+
+
+RAW_STDIN: Final[Optional[TextIOWrapper]] = sys.__stdin__
+RAW_STDOUT: Final[Optional[TextIOWrapper]] = sys.__stdout__
+RAW_STDERR: Final[Optional[TextIOWrapper]] = sys.__stderr__
