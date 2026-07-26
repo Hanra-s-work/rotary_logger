@@ -1,5 +1,5 @@
 build ==1.4.2
-pytest ==9.0.2
+pytest ==9.1.1
 
 # ask_question runtime dependencies
 -r ./requirements.txt
